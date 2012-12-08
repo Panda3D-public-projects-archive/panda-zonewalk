@@ -1,0 +1,23 @@
+#labels Featured
+
+==Introduction==
+
+Zonewalk is a very basic 3D viewing tool for zone files. Currently (as of v.0.0.2) it only supports the older s3d based zones (I think they switched to egg with OOW?). 
+
+==First time use and configuration==
+
+The first time you run zonewalk after a fresh install it creates a default configuration for itself (resolution 1024,768; default zone blackburrow ) but in order to complete this step you need to provide the program with a valid path to a directory with s3d zone files.
+
+The configuration is stored in a file named zonewalk.cfg. Under Windows 7 the Panda3D runtime stores this under C:\Users\your_user_name\AppData\Local\Panda3d\start\zonewalk.cfg. (todo: add other OS info). You can edit all entries in this file using a simple text editor, if you want to change the default display size for example
+
+==User Interface==
+
+This is currently very basic: just a few hot keys.
+
+  * WSAD Keys provide standard fwd/bck movement and camera roatation
+  * F Key toggles flymode on/off
+  * L Key opens the zone selection dialog
+  * ESC Key exits
+
+Additionally you can control your view using mouselook (hold right mouse button depressed and move the mouse)
+
