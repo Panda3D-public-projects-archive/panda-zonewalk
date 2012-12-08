@@ -1,6 +1,32 @@
 '''
 zonewalk
+
+zonewalk.py main driver
 gsk December 2012
+
+LICENSE:
+
+Copyright (c) <2012>, <gsk>
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided 
+that the following conditions are met:
+
+    Redistributions of source code must retain the above copyright notice, this list of conditions 
+    and the following disclaimer.
+    Redistributions in binary form must reproduce the above copyright notice, this list of conditions 
+    and the following disclaimer in the documentation and/or other materials provided with the distribution.
+    Neither the name of the <ORGANIZATION> nor the names of its contributors may be used to endorse or 
+    promote products derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR 
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND 
+FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR 
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, 
+OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; 
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
+WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY 
+OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 '''
 
@@ -32,7 +58,7 @@ from zone import Zone
 from config import Configurator
 from filedialog import FileDialog
 
-VERSION = '0.0.2'
+VERSION = '0.0.3'
 
 # Function to put instructions on the screen.
 def addInstructions(pos, msg):
@@ -53,8 +79,20 @@ class World(DirectObject):
         
         self.winprops = WindowProperties( )
 
+        # simple console output
+        self.consoleNode = NodePath(PandaNode("console_root"))
+        self.consoleNode.reparentTo(aspect2d)
+
+        self.console_num_lines = 24
+        self.console_cur_line = -1
+        self.console_lines = []
+        for i in range(0, self.console_num_lines):
+            self.console_lines.append(OnscreenText(text='', style=1, fg=(1,1,1,1),
+                        pos=(-1.3, .4-i*.05), align=TextNode.ALeft, scale = .035, parent = self.consoleNode))
+
         # Configuration
-        self.configurator = Configurator()
+        self.consoleOut('zonewalk v.%s loading configuration' % VERSION)
+        self.configurator = Configurator(self)
         cfg = self.configurator.config
         self.xres = int(cfg['xres'])
         self.yres = int(cfg['yres'])
@@ -71,21 +109,11 @@ class World(DirectObject):
         base.win.requestProperties( self.winprops ) 
         base.disableMouse()
         
-        # console output
-        self.consoleNode = NodePath(PandaNode("console_root"))
-        self.consoleNode.reparentTo(aspect2d)
-
-        self.console_num_lines = 24
-        self.console_cur_line = -1
-        self.console_lines = []
-        for i in range(0, self.console_num_lines):
-            self.console_lines.append(OnscreenText(text='', style=1, fg=(1,1,1,1),
-                        pos=(-1.3, .4-i*.05), align=TextNode.ALeft, scale = .035, parent = self.consoleNode))
                         
         # Post the instructions
         self.title = addTitle('zonewalk v.' + VERSION)
-        self.inst0 = addInstructions(0.95, "[FLYMODE]")
-        self.inst1 = addInstructions(-0.95, "F-key toggles flymode on/off. Camera control with WSAD/mouselook, L-key to load a zone, ESC to exit.")
+        self.inst0 = addInstructions(0.95, "[FLYMODE][1]")
+        self.inst1 = addInstructions(-0.95, "Press F to toggle flymode on/off, 1-5 to set speed. Camera control with WSAD/mouselook, L-key to load a zone, ESC to exit.")
         self.inst2 = addInstructions(0.9,  "Loc:")
         self.inst3 = addInstructions(0.85, "Hdg:")
         self.error_inst = addInstructions(0, '')
@@ -128,7 +156,10 @@ class World(DirectObject):
         self.camHeading = 0.0
         self.camPitch = 0.0
         base.camLens.setFov(65.0)
-                
+        
+        self.cam_speed = 0  # index into self.camp_speeds
+        self.cam_speeds = [40.0, 80.0, 160.0, 320.0, 640.0]
+        
         # Add the spinCameraTask procedure to the task manager.
         # taskMgr.add(self.spinCameraTask, "SpinCameraTask")
         taskMgr.add(self.camTask, "camTask")
@@ -161,9 +192,16 @@ class World(DirectObject):
     def consoleOff(self):
         self.consoleNode.hide()
         
+    # User controls -----------------------------------------------------------
     def toggleControls(self, on):
         if on == 1:
             self.accept("escape", self.exitGame)
+
+            self.accept("1", self.setSpeed, ["speed", 0])
+            self.accept("2", self.setSpeed, ["speed", 1])
+            self.accept("3", self.setSpeed, ["speed", 2])
+            self.accept("4", self.setSpeed, ["speed", 3])
+            self.accept("5", self.setSpeed, ["speed", 4])
 
             self.accept("f", self.toggleFlymode)
             self.accept("l", self.reloadZone)
@@ -183,17 +221,31 @@ class World(DirectObject):
         else:
             messenger.clear()
             
-    def toggleFlymode(self):
+    def setSpeed(self, key, value):
+        self.cam_speed = value
+        self.setFlymodeText()
+        
+    def setFlymodeText(self):
         zname = ''
         if self.zone:
             zname = self.zone.name
             
-        if self.flyMode == 1:
-            self.flyMode = 0
-            self.inst0.setText("[WALKMODE] "+zname)
+        if self.flyMode == 0:
+            self.inst0.setText("[WALKMODE][%i] %s" % (self.cam_speed+1, zname))
         else:
+            self.inst0.setText("[FLYMODE][%i] %s " % (self.cam_speed+1, zname))
+        
+    def toggleFlymode(self):
+        zname = ''
+        if self.zone:
+            zname = self.zone.name
+
+        if self.flyMode == 0:
             self.flyMode = 1
-            self.inst0.setText("[FLYMODE] "+zname)
+        else:
+            self.flyMode = 0
+            
+        self.setFlymodeText()
 
     # Define a procedure to move the camera.
     def spinCameraTask(self, task):
@@ -247,11 +299,12 @@ class World(DirectObject):
         v = render.getRelativeVector(base.camera, Vec3.forward())
         if not self.flyMode:
             v.setZ(0.0)
-            
+        
+        move_speed = self.cam_speeds[self.cam_speed]
         if self.keyMap["forward"] == 1:
-            self.campos += v * 40.0 * globalClock.getDt()
+            self.campos += v * move_speed * globalClock.getDt()
         if self.keyMap["backward"] == 1:
-            self.campos -= v * 40.0 * globalClock.getDt()
+            self.campos -= v * move_speed * globalClock.getDt()
             
         base.camera.setPos(self.campos)
         self.plnp.setPos(self.campos)      # move the point light with the viewer position
@@ -283,6 +336,10 @@ class World(DirectObject):
             
         taskMgr.step()
         
+    # ZONE loading ------------------------------------------------------------
+    
+    # general zone loader driver
+    # removes existing zone (if any) and load the new one 
     def loadZone(self, name, path):
         if path[len(path)-1] != '/':
             path += '/'
@@ -294,33 +351,38 @@ class World(DirectObject):
         error = self.zone.load()
         if error == 0:
             self.consoleOff()
-            if self.flyMode == 1:
-                self.inst0.setText('[FLYMODE] ' + name)
-            else:
-                self.inst0.setText('[WALKMODE] ' + name)
+            self.setFlymodeText()
                 
-    def load(self):
-        self.consoleOut('zonewalk v.%s loading configuration' % VERSION)
-        
+    # initial world load after bootup
+    def load(self):       
         cfg = self.configurator.config
         
         zone_name = cfg['default_zone']
         basepath = cfg['basepath']
         self.loadZone(zone_name, basepath)
-        basepath = cfg['basepath']
+    
 
     # zone reload user interface
+    
+    # this gets called from our update loop when it detects that zone_reload_name has been set
+    # we do this in this convoluted fashion in order to keep the main loop taskMgr updates ticking
+    # because otherwise our status console output at various stages during the zone load would not
+    # be displayed. Yes, this is hacky.
     def doReload(self, name):
         cfg = self.configurator.config
         basepath = cfg['basepath']
         self.loadZone(name, basepath)
         
-        
+    # form dialog callback
+    # this gets called from the form when the user has entered a something
+    # (hopefully a correct zone short name)
     def reloadZoneDialogCB(self, name):
         self.frmDialog.end()
         self.zone_reload_name = name
         self.toggleControls(1)
 
+    # this is called when the user presses "l"
+    # it disables normal controls and fires up our query form dialog
     def reloadZone(self):
         self.toggleControls(0)
         self.consoleOn()
@@ -329,7 +391,7 @@ class World(DirectObject):
             "Examples: qrg, blackburrow, freportn, ecommons etc.",
             self.reloadZoneDialogCB) 
         
-        self.frmDialog.activate()
+        self.frmDialog.activate()   # relies on the main update loop to run
 
 
 # ------------------------------------------------------------------------------
