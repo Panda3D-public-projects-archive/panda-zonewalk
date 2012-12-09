@@ -7,7 +7,7 @@ gsk 6/12/2012
 
 LICENSE:
 
-Copyright (c) <2012>, <gsk>
+Copyright (c) 2012, Gedolian Soft Kram
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification, are permitted provided 
