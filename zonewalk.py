@@ -58,7 +58,7 @@ from zone import Zone
 from config import Configurator
 from filedialog import FileDialog
 
-VERSION = '0.0.3'
+VERSION = '0.0.4'
 
 # Function to put instructions on the screen.
 def addInstructions(pos, msg):
@@ -396,7 +396,7 @@ class World(DirectObject):
         self.consoleOn()
         self.frmDialog = FileDialog(
             "Please enter the shortname of the zone you wish to load:", 
-            "Examples: qrg, blackburrow, freportn, ecommons etc.",
+            "Examples: qrg, blackburrow, freportn, crushbone etc.",
             self.reloadZoneDialogCB) 
         
         self.frmDialog.activate()   # relies on the main update loop to run

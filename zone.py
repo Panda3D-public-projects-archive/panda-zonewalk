@@ -35,7 +35,7 @@ import zlib
 
 from panda3d.core import Geom, GeomVertexData, GeomVertexFormat, GeomVertexWriter, GeomTriangles, GeomNode, CullFaceAttrib
 from panda3d.core import PNMImage, Texture, StringStream
-from panda3d.core import PandaNode, NodePath
+from panda3d.core import PandaNode, NodePath, TextureAttrib
 
 from s3dfile import S3DFile
 from wldfile import WLDFile
@@ -47,15 +47,20 @@ from ddsfile import DDSFile
 class PolyGroup():
     
     # vdata is the Panda3D vertex data object created by the main Mesh
-    def __init__(self, vdata):
+    def __init__(self, vdata, tex_idx):
         self.vdata = vdata      # vertex data, passed in from parent mesh
         
-        self.name = 'blah'
+        self.name = 'PolyGroup_'+str(tex_idx)
         self.geom = Geom(self.vdata)
         self.primitives = GeomTriangles(Geom.UHStatic)
         self.geom.addPrimitive(self.primitives)
         
-        
+    # called by the sprite animation code to let us know we need to change our texture image
+    def animFrameChange(self, t):
+        return 
+        # print 'POLYGROUP ANIMATION UPDATE'
+        self.nodePath.setTexture(t, 1)
+                
     def build(self, zone, f, start_index, n_polys, tex_idx):
         polyList = f.polyList
         poly_idx = start_index
@@ -66,6 +71,7 @@ class PolyGroup():
 
         self.node = GeomNode(self.name)
         self.node.addGeom(self.geom)
+        
         # attach all our nodes under the zone's geometry root node
         self.nodePath = zone.rootNode.attachNewNode(self.node)
         
@@ -81,6 +87,7 @@ class PolyGroup():
 
         # Texture setup
         sprite = zone.getSprite(tex_idx)
+        
         if sprite != None:
             # sprite.dump()
             t = sprite.textures[0]
@@ -89,8 +96,7 @@ class PolyGroup():
             pass
             # print 'Error: texture (idx=%i) not found. PolyGroup will be rendered untextured' % (tex_idx)
         
-         
-     
+              
         
 class Mesh():
 
@@ -138,12 +144,12 @@ class Mesh():
         # the PolyGroup creates all Polygons sharing a texture and adds them under a NodePath
         poly_idx = 0
         for pt in f.polyTexList:
-            pg = PolyGroup(self.vdata)
-            self.poly_groups.append(pg)
-            
             n_polys = pt[0]
             tex_idx = pt[1]
-            
+
+            pg = PolyGroup(self.vdata, tex_idx)
+            self.poly_groups.append(pg)
+                        
             # pass fragment so that it can access the SPRITES
             pg.build(zone, f, poly_idx, n_polys, tex_idx)
             poly_idx += n_polys            
@@ -157,20 +163,56 @@ class Sprite():
     def __init__(self, name, idx):
         self.name = name
         self.index = idx
-        self.numtex = 0
         
-        self.current_texture = 0
+        self.numtex = 0             # number of texture images (for multi textures or animated textures)
+        self.anim_delay = 0         # delay (in ms) between animation frame switches
+        self.current_texture = 0    # current animation frame
         
         self.texnames = []
         self.textures = []
+        
+        self.anim_render_states = [] # animated textures: render states of geoms (after flattening)referencing us
+                            
+    def update(self):
+        # print 'SPRITE ANIMATION UPDATE'
+        # update frame
+        self.current_texture += 1
+        if self.current_texture == self.numtex:
+            self.current_texture = 0
+            
+        t = self.textures[self.current_texture]
+        
+        # gnr is a tuple (see addAnimGeomRenderState() below)
+        for gnr in self.anim_render_states:
+            geom_node = gnr[0]
+            geom_number = gnr[1]
+            render_state = gnr[2]
+
+            # geom_render_state = geom_node.getGeomState(geom_number)              
+            # print geom_render_state
+            # attr = geom_render_state.getAttrib(26)  # attrib 26 is the texture attribute (hope this is static)
+            # print attr
+            # tex = attr.getTexture()
+            
+            ta = TextureAttrib.make(t)
+            new_state = render_state.setAttrib(ta, 1) # potentialy needs passing "int override" (=1?) as second param
+            geom_node.setGeomState(geom_number, new_state)
+            
+    # store render states passed in here for use in the texture animation frame update loop
+    # input is a tuple of (geom_node, geom_number, render_states)
+    def addAnimGeomRenderState(self, g):
+        self.anim_render_states.append(g)
         
     def addTexture(self, texname, texture):
         self.texnames.append(texname)
         self.textures.append(texture)
         self.numtex += 1
         
+    def setAnimDelay(self, delay):
+        self.anim_delay = delay
+        
     def dump(self):
-        print 'SPITE: %s index:%i numtex:%i' % (self.name, self.index, self.numtex)
+        print 'SPRITE: %s index:%i numtex:%i anim_delay:%i' % (self.name, self.index, self.numtex, self.anim_delay)
         for name in self.texnames:
             print name
 
@@ -192,8 +234,17 @@ class Zone():
         self.rootNode = NodePath(PandaNode("zone_root"))
         self.rootNode.reparentTo(render)
         
+        self.delta_t = 0
+        
     def update(self):
-        pass
+        # print 'update delta_t:', globalClock.getDt()
+        self.delta_t += globalClock.getDt()
+        if self.delta_t > 0.2:
+            self.delta_t = 0
+            for sprite in self.sprites.values():
+                # if anim_delay > 0 this sprite is an animated texture
+                if sprite.anim_delay > 0:
+                    sprite.update()     # drive all sprite animation updates    
         
     def getSprite(self, index):
         if self.sprites.has_key(index):
@@ -280,14 +331,8 @@ class Zone():
         # texname = texname.lower()
         
         if not self.textures.has_key(texname):
-            print 'loading texture:', texname
-            s3dentry = self.s3d.getFile(texname)
-            
-            '''
-            s3dentry = self.s3d.getFile(texname+'.bmp')
-            if s3dentry == None:
-                s3dentry = self.s3d.getFile(texname+'.dds')
-            '''    
+            # print 'loading texture:', texname
+            s3dentry = self.s3d.getFile(texname)            
             if s3dentry != None:
                 texfile = s3dentry.data
                 (magic,) = struct.unpack('<2s', texfile[0:2])
@@ -343,11 +388,11 @@ class Zone():
         f31 = None
         for f in self.wldZone.fragments.values():
             if f.type == 0x03:
-                f.dump()
+                # f.dump()
                 
                 # NOTE
                 # in VERSION 2 WLD zones (ex. povalor, postorms) I've found texture names
-                # that have three parameters prepended like this: 1, 4, 0, POVSNOWDET01.DDS
+                # that have three parameters prepended like this for example: 1, 4, 0, POVSNOWDET01.DDS
                 # no idea yet as to what these mean but in order to be able to load the texture from 
                 # the s3d container we need to strip this stuff
                 for name in f.names:
@@ -405,6 +450,8 @@ class Zone():
 
                     name = self.wldZone.getName(f04.nameRef)
                     sprite = Sprite(name, idx)
+                    sprite.setAnimDelay(f04.params2)
+                    
                     for f03ref in  f04.frag03Refs:
                         f03 = self.wldZone.getFragment(f03ref)
                         # f03.dump()
@@ -429,13 +476,28 @@ class Zone():
                 print 'Error in Sprite: could not resolve frag05ref:%i in 0x30 fragment:%i' % (f30.frag05Ref, f30.id)
 
             if sprite_error != 1:   # only add error free sprites
-                sprite.dump()
+                # sprite.dump()
                 self.sprites[idx] = sprite
                 
             idx += 1    # need to increment regardless of whether we stored or not
                         # so that the index lookup using the refs in the 0x36's works
-                
-                
+    
+        print 'zone has %i sprites' % (len(self.sprites))
+        
+    # find the sprite using the texture passed in            
+    def findSpriteUsing(self, t):
+        # print 'SEARCHING texture:', t
+        for sprite in self.sprites.values():
+            for texture in sprite.textures:
+                # print 'looking at sprite texture:', texture
+                if texture == t:
+                    # print 'M A T C H'
+                    return sprite
+                    
+        return None
+            
+        
+    # load up everything related to this zone
     def load(self):
         s3dfile_name = self.name+'.s3d'
         self.world.consoleOut('zone loading zone s3dfile: ' + s3dfile_name)
@@ -458,7 +520,38 @@ class Zone():
         # let Panda3D attempt to flatten the zone geometry (reduce the excessive
         # Geom count resulting from the layout of the .wld zone data as a huge
         # bunch of tiny bsp regions)
-        self.world.consoleOut('flattening zone mesh geom tree')
+        self.world.consoleOut('flattening zone mesh geom tree')        
         self.rootNode.flattenStrong()    
         
+        
+        # -------------------------------------------------------------------------------------
+        # WORK IN PROGRESS: ANIMATED TEXTURE SETUP
+        # trying to evaluate the scene graph structure under our root node here
+        # since flattenStrong() totally changes the structure of our scene from how we 
+        # originally created it, we need to find a way to:
+        #   - get a the geoms that the flatten process has produced
+        #   - find their textures
+        #   - map those back to our sprites
+        #   - and finally set up the update process for texture animations based on the above
+        # 
+        # NOTE this code will fail if there are any sprites that use the same textures!
+        # Not encountered this yet though.
+        # self.rootNode.ls()
+    
+        for child in self.rootNode.getChildren():
+            # print child
+            geom_node = child.node()
+            for geom_number in range(0, geom_node.getNumGeoms()):
+                geom_render_state = geom_node.getGeomState(geom_number)              
+                attr = geom_render_state.getAttrib(26)  # attrib 26 is the texture attribute (hope this is static)
+                # print attr
+                tex = attr.getTexture()
+                # print tex       # BINGO! now we have the texture for this GEOM, lets find the sprite
+                sprite = self.findSpriteUsing(tex)
+                if sprite != None:
+                    print sprite
+                    sprite.addAnimGeomRenderState((geom_node, geom_number, geom_render_state))
+                else:
+                    print 'could not find sprite for geom node, node texture cant be animated'
+            
         return 0
