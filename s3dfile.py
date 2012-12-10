@@ -30,6 +30,7 @@ OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMA
 
 '''
 
+import sys
 import struct
 import zlib
 from operator import attrgetter
@@ -183,4 +184,23 @@ class S3DFile():
             d = self.direntries[i]
             print 'file:', f.filename,  ' size:', f.size
    
-            
+# ------------------------------------------------------------------------------
+# main
+#
+# can use this module standalone as an s3d directory dump tool
+# ------------------------------------------------------------------------------
+
+
+
+def main():
+    fname = sys.argv[1]
+    print 'loading', fname
+    f = S3DFile(fname)
+    f.load()
+    f.dumpListing()
+
+if __name__ == "__main__":
+    main()
+
+    
+    

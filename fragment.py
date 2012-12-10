@@ -91,9 +91,10 @@ class Fragment36(Fragment):
                 self.uvList.append(uvdata)
         if self.wld.version == WLD.Version2WLD:
             for i in range(0, f.texCoordsCount):    
-                uvdata = struct.unpack('<ff', buf[offset:offset+8])
+                vdata = struct.unpack('<ff', buf[offset:offset+8])
                 offset += 8
-                uvdata = array.array('f', (vdata[0], vdata[1]))
+                # print vdata[0], vdata[1]
+                uvdata = array.array('f', (vdata[0], 0.0-vdata[1]))
                 self.uvList.append(uvdata)
         
         # Vertex normals
@@ -168,9 +169,9 @@ class Fragment31(Fragment):
     def dump(self):
         Fragment.dump(self)
         f = self
-        print 'numNameRefs:%i' % (f.numNameRefs)
+        print 'numF30Refs:%i' % (f.numNameRefs)
         for nameRef in f.nameRefs:
-            print nameRef
+            print 'f30Ref:%i' % (nameRef)
         
 # Texture Reference
 class Fragment30(Fragment):

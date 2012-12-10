@@ -205,6 +205,7 @@ class World(DirectObject):
 
             self.accept("f", self.toggleFlymode)
             self.accept("l", self.reloadZone)
+            self.accept("z", self.saveDefaultZone)
             self.accept("a", self.setKey, ["cam-left",1])
             self.accept("d", self.setKey, ["cam-right",1])
             self.accept("w", self.setKey, ["forward",1])
@@ -362,6 +363,13 @@ class World(DirectObject):
         self.loadZone(zone_name, basepath)
     
 
+    # config save user interfacce
+    def saveDefaultZone(self):
+        if self.zone:
+            cfg = self.configurator.config
+            cfg['default_zone'] = self.zone.name
+            self.configurator.saveConfig()
+        
     # zone reload user interface
     
     # this gets called from our update loop when it detects that zone_reload_name has been set

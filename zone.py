@@ -75,7 +75,9 @@ class PolyGroup():
         # self.nodePath.showBounds()
         
         self.nodePath.setPos(f.centerX, f.centerY,f.centerZ)    # translate to correct world position
+        
         self.nodePath.setAttrib(CullFaceAttrib.make(CullFaceAttrib.MCullCounterClockwise))
+        # self.nodePath.setAttrib(CullFaceAttrib.make(CullFaceAttrib.MCullClockwise))
 
         # Texture setup
         sprite = zone.getSprite(tex_idx)
@@ -263,26 +265,29 @@ class Zone():
         return new_bm
         
     # Parameter f is a 0x03 type texture file definition fragment
-    def loadTexture(self, f):
+    def loadTexture(self, texname):
         # Note that we reference the texture files by name. The loader here
         # loads textures only if they are not already in the dictionary. 
         
         # this currently only supports the .bmp files I found in the old (pre GOD?) s3d zone files
-        texname = self.wldZone.getName(f.nameRef)
+        # texname = self.wldZone.getName(f.nameRef)
         
         # In typical windows style we'll encounter all types of mixed case names, even spelled
         # differently in various fragments within the same file: Once again we simply enforce all lower case
         # before using the name as a key
         # This works by the assumption that texture names are unique 
         # (and also case insensitive as s3d.getFile() enforces lower case on all names)
-        texname = texname.lower()
+        # texname = texname.lower()
         
         if not self.textures.has_key(texname):
-            # print 'loading texture:', texname
+            print 'loading texture:', texname
+            s3dentry = self.s3d.getFile(texname)
+            
+            '''
             s3dentry = self.s3d.getFile(texname+'.bmp')
             if s3dentry == None:
                 s3dentry = self.s3d.getFile(texname+'.dds')
-                
+            '''    
             if s3dentry != None:
                 texfile = s3dentry.data
                 (magic,) = struct.unpack('<2s', texfile[0:2])
@@ -299,7 +304,6 @@ class Zone():
                     
                     t = Texture()               # create texture object
                     t.load(ti)                  # load texture from pnmimage
-                    self.textures[texname] = t  # and finally store
                 elif magic == 'DD':
                     # DDS file
                     dds = DDSFile(texfile)
@@ -311,11 +315,19 @@ class Zone():
                     ts = StringStream(dds.buf)  # turn into an istream                   
                     t = Texture()               # create texture object
                     t.readDds(ts)               # load texture from dds ram image
-                    self.textures[texname] = t  # and finally store
                 else:
                     print 'Error unsupported texture: %s magic:%s referenced in fragment: %i' % (texname, magic, f.id)
+                    return
             else:
                 print 'Error: texture %s not found in s3d archive' % (texname)
+                return
+            
+            # t.setWrapU(Texture.WMClamp)
+            # t.setWrapV(Texture.WMClamp)
+            
+            # need to strip the extension (or do we? rather go back to storing with it? Need to 
+            # check how the PolyGroup code handles texture references once again)
+            self.textures[self.prepTextureName(texname)] = t  # and finally store
             
         
     def prepTextureName(self, name):
@@ -331,9 +343,26 @@ class Zone():
         f31 = None
         for f in self.wldZone.fragments.values():
             if f.type == 0x03:
-                self.loadTexture(f)
+                f.dump()
+                
+                # NOTE
+                # in VERSION 2 WLD zones (ex. povalor, postorms) I've found texture names
+                # that have three parameters prepended like this: 1, 4, 0, POVSNOWDET01.DDS
+                # no idea yet as to what these mean but in order to be able to load the texture from 
+                # the s3d container we need to strip this stuff
+                for name in f.names:
+                    i = name.rfind(',')
+                    if i != -1:
+                        # See NOTE above
+                        print 'parametrized texture name found:%s wld version:0x%x' % (name, self.wldZone.version)
+                        name = name[i+1:].strip()
+            
+                    self.loadTexture(name.lower())
+                    
+                    
             if f.type == 0x31:
                 f31 = f         # we'll need this one below 
+                # f31.dump()
                 
         # create the SPRITE objects: these can reference a single texture or
         # a list of them (for animated textures like water, lava etc.)
@@ -400,7 +429,7 @@ class Zone():
                 print 'Error in Sprite: could not resolve frag05ref:%i in 0x30 fragment:%i' % (f30.frag05Ref, f30.id)
 
             if sprite_error != 1:   # only add error free sprites
-                # sprite.dump()
+                sprite.dump()
                 self.sprites[idx] = sprite
                 
             idx += 1    # need to increment regardless of whether we stored or not
