@@ -212,6 +212,8 @@ class Fragment05(Fragment):
 class Fragment04(Fragment):
     def __init__(self, id, type, nameRef, wld):
         Fragment.__init__(self, id, type, nameRef, wld)
+        self.params1 = 0
+        self.params2 = 0
         
     def decode(self, buf, offset):        
         offset += 12    # skip over generic fragment header first
@@ -219,10 +221,13 @@ class Fragment04(Fragment):
         (f.flags, f.numRefs ) = struct.unpack('<ii',  buf[offset:offset+8])
         offset += 8
         
-        # skip unused params fields if they exist (as indicated by flags)
+        # read optional parameters (according to the flags field)
         if f.flags & (1 << 2):
+            (f.params1, ) = struct.unpack('<i',  buf[offset:offset+4])
             offset += 4
         if f.flags & (1 << 3):
+            # currently assuming  this is the time in ms between animation updates
+            (f.params2, ) = struct.unpack('<i',  buf[offset:offset+4])
             offset += 4
 
         f.frag03Refs = []
@@ -234,7 +239,16 @@ class Fragment04(Fragment):
     def dump(self):
         Fragment.dump(self)
         f = self
-        print 'flags:0x%x numRefs:%i' % (f.flags, f.numRefs)
+
+        p1 = 0
+        p2 = 0
+        
+        if f.flags & (1 << 2):
+            p1 = f.params1
+        if f.flags & (1 << 3):
+            p2 = f.params2
+
+        print 'flags:0x%x numRefs:%i params1:%i params2:%i' % (f.flags, f.numRefs, p1, p2)
         for ref in f.frag03Refs:
             print ref
 
