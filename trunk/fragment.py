@@ -109,8 +109,9 @@ class Fragment36(Fragment):
         # Vertex colors: 32bit rgba
         f.vertexColorsList = []
         for i in range(0, f.colorCount):
-            (rgba,) = struct.unpack('<i', buf[offset:offset+4])
+            (rgba,) = struct.unpack('<I', buf[offset:offset+4])
             offset += 4
+            # print 'RGBA 0x%x' % (rgba)
             f.vertexColorsList.append(rgba)
         
         # read polygon data (actually this is a misnomer as the fixed length structure in the wld for these 
@@ -181,7 +182,7 @@ class Fragment30(Fragment):
     def decode(self, buf, offset):        
         offset += 12    # skip over generic fragment header first
         f = self
-        (f.flags, f.params1, f.params2, f.params3_1, f.params3_2, f.frag05Ref ) = struct.unpack('<iiiffI',  buf[offset:offset+24])
+        (f.flags, f.params1, f.params2, f.params3_1, f.params3_2, f.frag05Ref ) = struct.unpack('<iIiffI',  buf[offset:offset+24])
         offset += 24
         # note that we do not read&store the "datapair" that can follow here if Bit 1 of flags is set.
         # Its purpose is unknown anyway currently 
