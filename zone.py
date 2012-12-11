@@ -534,24 +534,26 @@ class Zone():
         #   - map those back to our sprites
         #   - and finally set up the update process for texture animations based on the above
         # 
-        # NOTE this code will fail if there are any sprites that use the same textures!
+        # NOTE this code will fail if there is more than one sprite useing a single texture!
         # Not encountered this yet though.
         # self.rootNode.ls()
     
+        self.world.consoleOut('setting up animated textures')        
         for child in self.rootNode.getChildren():
             # print child
             geom_node = child.node()
             for geom_number in range(0, geom_node.getNumGeoms()):
                 geom_render_state = geom_node.getGeomState(geom_number)              
                 attr = geom_render_state.getAttrib(26)  # attrib 26 is the texture attribute (hope this is static)
-                # print attr
-                tex = attr.getTexture()
-                # print tex       # BINGO! now we have the texture for this GEOM, lets find the sprite
-                sprite = self.findSpriteUsing(tex)
-                if sprite != None:
-                    print sprite
-                    sprite.addAnimGeomRenderState((geom_node, geom_number, geom_render_state))
-                else:
-                    print 'could not find sprite for geom node, node texture cant be animated'
+                if attr != None:
+                    # print attr
+                    tex = attr.getTexture()
+                    # print tex       # BINGO! now we have the texture for this GEOM, lets find the sprite
+                    sprite = self.findSpriteUsing(tex)
+                    if sprite != None:
+                        print sprite
+                        sprite.addAnimGeomRenderState((geom_node, geom_number, geom_render_state))
+                    else:
+                        print 'could not find sprite for geom node, node texture cant be animated'
             
         return 0
