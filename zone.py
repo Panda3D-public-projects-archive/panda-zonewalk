@@ -27,6 +27,8 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON A
 WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY 
 OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+
+
 '''
 
 
@@ -35,7 +37,8 @@ import zlib
 
 from panda3d.core import Geom, GeomVertexData, GeomVertexFormat, GeomVertexWriter, GeomTriangles, GeomNode, CullFaceAttrib
 from panda3d.core import PNMImage, Texture, StringStream
-from panda3d.core import PandaNode, NodePath, TextureAttrib
+from panda3d.core import PandaNode, NodePath, TextureAttrib, TransparencyAttrib, ColorAttrib
+from panda3d.core import Vec4 
 
 from s3dfile import S3DFile
 from wldfile import WLDFile
@@ -60,8 +63,12 @@ class PolyGroup():
         return 
         # print 'POLYGROUP ANIMATION UPDATE'
         self.nodePath.setTexture(t, 1)
+            
                 
     def build(self, zone, f, start_index, n_polys, tex_idx):
+
+        sprite = zone.getSprite(tex_idx)
+            
         polyList = f.polyList
         poly_idx = start_index
         for poly in range(0, n_polys):
@@ -76,7 +83,6 @@ class PolyGroup():
         self.nodePath = zone.rootNode.attachNewNode(self.node)
         
         # self.nodePath.setRenderModeWireframe()
-        # Texture setup
         # self.nodePath.setRenderModeFilled()
         # self.nodePath.showBounds()
         
@@ -86,15 +92,15 @@ class PolyGroup():
         # self.nodePath.setAttrib(CullFaceAttrib.make(CullFaceAttrib.MCullClockwise))
 
         # Texture setup
-        sprite = zone.getSprite(tex_idx)
-        
         if sprite != None:
             # sprite.dump()
-            t = sprite.textures[0]
-            self.nodePath.setTexture(t)
+            if sprite.numtex > 0:   
+                t = sprite.textures[0]
+                self.nodePath.setTexture(t)
         else:
-            pass
-            # print 'Error: texture (idx=%i) not found. PolyGroup will be rendered untextured' % (tex_idx)
+            print 'Error: texture (idx=%i) not found. PolyGroup will be rendered untextured' % (tex_idx)
+
+        return 1
         
               
         
@@ -108,11 +114,15 @@ class Mesh():
         #
         # GeomVertexFormat.getV3cpt2()  - vertex, color, uv
         # GeomVertexFormat.getV3t2()    - vertex, uv
-        # GeomVertexFormat.getV3c4()    - vertex, color
+        # GeomVertexFormat.getV3cp()    - vertex, color
         # GeomVertexFormat.getV3n3t2()  - vertex, normal, uv
         # GeomVertexFormat.getV3n3cpt2()- vertex, normal, rgba, uv
         
-        self.vdata = GeomVertexData(name,GeomVertexFormat.getV3n3cpt2(), Geom.UHStatic)
+        # textured
+        self.vdata = GeomVertexData(name, GeomVertexFormat.getV3n3cpt2(), Geom.UHStatic)
+        
+        # plain color filled polys
+        # self.vdata = GeomVertexData(name, GeomVertexFormat.getV3cp(), Geom.UHStatic)
         
         self.vertex = GeomVertexWriter(self.vdata, 'vertex')
         self.vnormal = GeomVertexWriter(self.vdata, 'normal')
@@ -128,6 +138,14 @@ class Mesh():
 
         # write vertex colors
         for rgba in f.vertexColorsList:
+            '''
+            r = (rgba & 0xff000000) >> 24
+            g = (rgba & 0x00ff0000) >> 16
+            b = (rgba & 0x0000ff00) >> 8
+            a = (rgba & 0x000000ff)
+            if a != 0:
+                print 'vertex color has alpha component, r:0x%x g:0x%x b:0x%x a:0x%x ' % (r, g, b, a)
+            '''    
             self.color.addData1f(rgba)
 
         # write vertex normals
@@ -148,10 +166,11 @@ class Mesh():
             tex_idx = pt[1]
 
             pg = PolyGroup(self.vdata, tex_idx)
-            self.poly_groups.append(pg)
                         
             # pass fragment so that it can access the SPRITES
-            pg.build(zone, f, poly_idx, n_polys, tex_idx)
+            if pg.build(zone, f, poly_idx, n_polys, tex_idx) == 1:
+                self.poly_groups.append(pg)
+
             poly_idx += n_polys            
         
         if poly_idx != f.polyCount or poly_idx != len(f.polyList):
@@ -160,9 +179,21 @@ class Mesh():
         
 class Sprite():
     
-    def __init__(self, name, idx):
+    def __init__(self, name, idx, params1):
         self.name = name
         self.index = idx
+        self.params1 = params1
+        
+        self.alpha = 0.4      # default transparency alpha applied to semi transparent textures
+
+        if self.params1 & 0x00000004:
+            self.transparent = 1
+        else:
+            self.transparent = 0
+
+        if not self.params1 & 0x80000000:
+            self.transparent = 1
+            self.alpha = 0.0         # these are completely transparent (=invisible)
         
         self.numtex = 0             # number of texture images (for multi textures or animated textures)
         self.anim_delay = 0         # delay (in ms) between animation frame switches
@@ -172,6 +203,7 @@ class Sprite():
         self.textures = []
         
         self.anim_render_states = [] # animated textures: render states of geoms (after flattening)referencing us
+                            
                             
     def update(self):
         # print 'SPRITE ANIMATION UPDATE'
@@ -193,9 +225,10 @@ class Sprite():
             # attr = geom_render_state.getAttrib(26)  # attrib 26 is the texture attribute (hope this is static)
             # print attr
             # tex = attr.getTexture()
-            
+
+            # do the texture switch on the geom level by setting the TextureAttrib on its RenderState
             ta = TextureAttrib.make(t)
-            new_state = render_state.setAttrib(ta, 1) # potentialy needs passing "int override" (=1?) as second param
+            new_state = render_state.setAttrib(ta, 1) # potentialy needs passing "int override" (=1?) as second param          
             geom_node.setGeomState(geom_number, new_state)
             
     # store render states passed in here for use in the texture animation frame update loop
@@ -227,6 +260,8 @@ class Zone():
         self.world.consoleOut('zone initializing: '+self.name)
         
         self.textures = {}      # dictionary of panda3d Texure() objects, indexed by texture name
+        self.nulltex = Texture()  # create dummy exture object for use in non textured polys
+
         self.sprites = {}       # SPRITE objects (1-n multitexture groups), indexed by 0x31 fragment index number
                                 # as referenced in our meshes
         self.meshes = []
@@ -265,9 +300,9 @@ class Zone():
                 self.meshes.append(m)
                     
     # dump .bmp file header info
-    def dumpBMPInfo(self, bm):
+    def dumpBMPInfo(self, bm, name=''):
         (magic, size, dummy, offset) = struct.unpack('<2siii', bm[0:14])
-        print 'bmp magic:%s size:%i offset:%i' % (magic, size, offset)
+        print 'bmp %s magic:%s size:%i offset:%i' % (name, magic, size, offset)
         
         (biSize, biWidth, biHeight, biPlanes, biBitCount, biCompression, biSizeImage, dummy1, dummy2, biClrUsed, biClrImportant) = \
         struct.unpack('<iIIhhiiIIii', bm[14:14+40])
@@ -313,6 +348,10 @@ class Zone():
         else:
             new_bm = bm     # leave it as is
             
+        # file = open(name, 'wb')
+        # file.write(new_bm)
+        # file.close()
+        
         return new_bm
         
     # Parameter f is a 0x03 type texture file definition fragment
@@ -338,10 +377,11 @@ class Zone():
                 (magic,) = struct.unpack('<2s', texfile[0:2])
                 if magic == 'BM':
                     # Generic BMP file
-                    # self.dumpBMPInfo(texfile)
                     texfile = self.checkBmp(texfile, texname)
                     if texfile == None:
                         return
+
+                    # self.dumpBMPInfo(texfile, texname)
                     
                     ts = StringStream(texfile)  # turn into an istream
                     ti = PNMImage()             # create panda3d general purpose image object
@@ -420,9 +460,18 @@ class Zone():
             sprite = None
             # print ref30
             f30 = self.wldZone.getFragment(ref30)
+            # f30.dump()
+
             material_name = self.wldZone.getName(f30.nameRef)
             
-            # f30.dump()
+            # Note on TRANSPARENCY: as far as I can tell so far, bit 2 in the params1 field of f30
+            # is the "semi-transparent" indicator used for all types of water surfaces for the old
+            # zones (pre POP? Seems to not work like this in zones like POV for example anymore)
+            # lets go by this theory anyway for now
+            if f30.params1 & 0x00000004:
+                print 'SEMI TRANSPARENT MATERIAL:'
+                f30.dump()
+                
             # print 'looking up 0x05 fragment with id_plus_1:', f30.frag05Ref
             
             # Note that there are frag05Refs inside some 0x30 fragments with value <=0 
@@ -437,7 +486,7 @@ class Zone():
                     # print texfile_name
                     if self.textures.has_key(texfile_name):
                         # we dont have a sprite def (0x04) for these, so we use the material (0x30) name
-                        sprite = Sprite(material_name, idx)
+                        sprite = Sprite(material_name, idx, f30.params1)
                         sprite.addTexture(texfile_name, self.textures[texfile_name]) 
                     else:
                         sprite_error = 1
@@ -449,7 +498,7 @@ class Zone():
                     # f04.dump()
 
                     name = self.wldZone.getName(f04.nameRef)
-                    sprite = Sprite(name, idx)
+                    sprite = Sprite(name, idx, f30.params1)
                     sprite.setAnimDelay(f04.params2)
                     
                     for f03ref in  f04.frag03Refs:
@@ -464,13 +513,24 @@ class Zone():
                             sprite_error = 1
                             print 'Error in Sprite:', name, 'Texure not found:', texfile_name
                 else:
-                    sprite_error = 1
-                    print 'Error in Material:%s. Texture ref in 0x30 frag is not type 0x5 or 0x3 but 0x%x' % (material_name, frag.type)
-                    print 'F30 DUMP:'
-                    f30.dump()
-                    print 'Referenced Fragment DUMP:'
-                    frag.dump()
+                    # This is the "does point nowhere meaningful at all" case
+                    # infact the reference points back to the same fragment (circular)
+                    # This type of 0x30 fragment seem  to only have been used for zone boundary polygons
+                    # in the original EQ classic zones 
+                    # Note that we create a sprite with just a dummy texture in it for these
                     
+                    # sprite_error = 1
+                    print 'Warning : Non standard material:%s. Texture ref in 0x30 frag is not type 0x5 or 0x3 but 0x%x' % (material_name, frag.type)
+                    # print 'F30 DUMP:'
+                    # f30.dump()
+                    # print 'Referenced Fragment DUMP:'
+                    # frag.dump()
+                    
+                    # this will be a sprite with just the dummy nulltex textures
+                    # we need this so that transparent zonewalls in the very old classic zones work
+                    # newer zones have actually textured ("collide.dds") zone walls
+                    sprite = Sprite(name, idx, f30.params1)
+                    sprite.addTexture('nulltexture', self.nulltex)
             else:
                 sprite_error = 1
                 print 'Error in Sprite: could not resolve frag05ref:%i in 0x30 fragment:%i' % (f30.frag05Ref, f30.id)
@@ -525,7 +585,7 @@ class Zone():
         
         
         # -------------------------------------------------------------------------------------
-        # WORK IN PROGRESS: ANIMATED TEXTURE SETUP
+        # ANIMATED TEXTURE SETUP AND TRANSPARENCY
         # trying to evaluate the scene graph structure under our root node here
         # since flattenStrong() totally changes the structure of our scene from how we 
         # originally created it, we need to find a way to:
@@ -538,6 +598,7 @@ class Zone():
         # Not encountered this yet though.
         # self.rootNode.ls()
     
+        
         self.world.consoleOut('setting up animated textures')        
         for child in self.rootNode.getChildren():
             # print child
@@ -551,9 +612,25 @@ class Zone():
                     # print tex       # BINGO! now we have the texture for this GEOM, lets find the sprite
                     sprite = self.findSpriteUsing(tex)
                     if sprite != None:
-                        print sprite
-                        sprite.addAnimGeomRenderState((geom_node, geom_number, geom_render_state))
+                        # print sprite
+                        
+                        if sprite.transparent == 1:
+                            # EXPERIMENTAL TRANSPARENCY SUPPORT ###############
+                            ta = TransparencyAttrib.make(TransparencyAttrib.MAlpha)
+                            geom_render_state = geom_render_state.setAttrib(ta, 1)  # potentialy needs passing "int override" (=1?) as second param
+                            ca = ColorAttrib.makeFlat(Vec4(1, 1, 1, sprite.alpha))
+                            geom_render_state = geom_render_state.setAttrib(ca, 1)  # potentialy needs passing "int override" (=1?) as second param
+                            geom_node.setGeomState(geom_number, geom_render_state)
+                            # #####################################################
+
+                        if sprite.anim_delay > 0:
+                            # ANIMATED SPRITE
+                            # sprite.addAnimGeomRenderState((geom_node, geom_number, geom_render_state))
+                            sprite.addAnimGeomRenderState((geom_node, geom_number, geom_render_state))
+
                     else:
                         print 'could not find sprite for geom node, node texture cant be animated'
-            
+                    
+
+        
         return 0

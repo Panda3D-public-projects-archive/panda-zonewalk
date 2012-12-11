@@ -58,7 +58,7 @@ from zone import Zone
 from config import Configurator
 from filedialog import FileDialog
 
-VERSION = '0.0.4'
+VERSION = '0.0.5'
 
 # Function to put instructions on the screen.
 def addInstructions(pos, msg):
