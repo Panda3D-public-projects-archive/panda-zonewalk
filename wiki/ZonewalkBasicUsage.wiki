@@ -1,7 +1,7 @@
 #labels Featured
 ==Introduction==
 
-Zonewalk is a very basic 3D viewing tool for zone files. Currently (as of v.0.0.2) it only supports the older s3d based zones (I think they switched to egg with OOW?). 
+Zonewalk is a very basic 3D viewing tool for zone files. Currently (as of v.0.0.5) it only supports the older s3d based zones (I think they switched to egg with OOW?). And even within that group theres differences in support levels: anything up to POP works quite well, fromm there on some functionality is not yet in place. These zones load but some look awkward at best.
 
 ==First time use and configuration==
 
