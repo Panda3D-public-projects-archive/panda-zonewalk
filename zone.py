@@ -38,7 +38,8 @@ import zlib
 from panda3d.core import Geom, GeomVertexData, GeomVertexFormat, GeomVertexWriter, GeomTriangles, GeomNode, CullFaceAttrib
 from panda3d.core import PNMImage, Texture, StringStream
 from panda3d.core import PandaNode, NodePath, TextureAttrib, TransparencyAttrib, ColorAttrib
-from panda3d.core import Vec4 
+from panda3d.core import Vec4, BitMask32 
+from panda3d.core import CollisionNode, CollisionSolid
 
 from s3dfile import S3DFile
 from wldfile import WLDFile
@@ -631,6 +632,8 @@ class Zone():
                     else:
                         print 'could not find sprite for geom node, node texture cant be animated'
                     
+        # COLLISION
+        self.rootNode.setCollideMask(BitMask32.bit(0)) 
 
         
         return 0
