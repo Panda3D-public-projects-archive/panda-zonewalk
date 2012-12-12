@@ -42,9 +42,10 @@ from direct.gui.OnscreenText import OnscreenText
 import direct.directbase.DirectStart
 
 from panda3d.core import TextNode, PandaNode, NodePath
-
+from panda3d.core import CollisionTraverser,CollisionNode
+from panda3d.core import CollisionHandlerQueue,CollisionRay
 from panda3d.core import Filename,AmbientLight,DirectionalLight, PointLight
-from panda3d.core import Vec3, Vec4, Point3, VBase4
+from panda3d.core import Vec3, Vec4, Point3, VBase4, BitMask32
 from panda3d.core import PStatClient
 
 from direct.gui.OnscreenText import OnscreenText
@@ -58,7 +59,7 @@ from zone import Zone
 from config import Configurator
 from filedialog import FileDialog
 
-VERSION = '0.0.5'
+VERSION = '0.0.6'
 
 # Function to put instructions on the screen.
 def addInstructions(pos, msg):
@@ -97,7 +98,7 @@ class World(DirectObject):
         self.xres = int(cfg['xres'])
         self.yres = int(cfg['yres'])
 
-        self.eyeHeight = 1.5
+        self.eyeHeight = 7.0
         self.rSpeed = 80
         self.flyMode = 1
 
@@ -159,6 +160,36 @@ class World(DirectObject):
         
         self.cam_speed = 0  # index into self.camp_speeds
         self.cam_speeds = [40.0, 80.0, 160.0, 320.0, 640.0]
+        
+        
+        # Collision Detection for "WALKMODE"
+        # We will detect the height of the terrain by creating a collision
+        # ray and casting it downward toward the terrain.  The ray will start above the camera.
+        # A ray may hit the terrain, or it may hit a rock or a tree.  If it
+        # hits the terrain, we can detect the height.  If it hits anything
+        # else, we rule that the move is illegal.
+        
+        self.cTrav = CollisionTraverser()
+        self.camGroundRay = CollisionRay()
+        self.camGroundRay.setOrigin(0.0, 0.0, 0.0)
+        self.camGroundRay.setDirection(0,0,-1)      # straight down
+        self.camGroundCol = CollisionNode('camRay')
+        self.camGroundCol.addSolid(self.camGroundRay)
+        self.camGroundCol.setFromCollideMask(BitMask32.bit(0))
+        self.camGroundCol.setIntoCollideMask(BitMask32.allOff())
+        
+        # attach the col node to the camCollider dummy node
+        self.camGroundColNp = base.camera.attachNewNode(self.camGroundCol)  
+        self.camGroundHandler = CollisionHandlerQueue()
+        self.cTrav.addCollider(self.camGroundColNp, self.camGroundHandler)
+        
+        
+        # Uncomment this line to see the collision rays
+        # self.camGroundColNp.show()
+       
+        # Uncomment this line to show a visual representation of the 
+        # collisions occuring
+        # self.cTrav.showCollisions(render)
         
         # Add the spinCameraTask procedure to the task manager.
         # taskMgr.add(self.spinCameraTask, "SpinCameraTask")
@@ -305,10 +336,37 @@ class World(DirectObject):
         if self.keyMap["forward"] == 1:
             self.campos += v * move_speed * globalClock.getDt()
         if self.keyMap["backward"] == 1:
-            self.campos -= v * move_speed * globalClock.getDt()
-            
+            self.campos -= v * move_speed * globalClock.getDt()            
+
+        # actually move the camera
         base.camera.setPos(self.campos)
         self.plnp.setPos(self.campos)      # move the point light with the viewer position
+
+        # WALKMODE: simple collision detection
+        # we simply check a ray from slightly below the "eye point" straight down
+        # for geometry collisions and if there are any we detect the point of collision
+        # and adjust the camera's Z accordingly
+        if self.flyMode == 0:   
+            # move the camera to where it would be if it made the move 
+            # the colliderNode moves with it
+            # base.camera.setPos(self.campos)
+            # check for collissons
+            self.cTrav.traverse(render)
+            entries = []
+            for i in range(self.camGroundHandler.getNumEntries()):
+                entry = self.camGroundHandler.getEntry(i)
+                entries.append(entry)
+                # print 'collision'
+            entries.sort(lambda x,y: cmp(y.getSurfacePoint(render).getZ(),
+                                         x.getSurfacePoint(render).getZ()))
+                                     
+            if (len(entries) > 0): # and (entries[0].getIntoNode().getName() == "terrain"):
+                # print len(entries)
+                self.campos.setZ(entries[0].getSurfacePoint(render).getZ()+self.eyeHeight)
+        
+            #if (base.camera.getZ() < self.player.getZ() + 2.0):
+            #    base.camera.setZ(self.player.getZ() + 2.0)
+
 
         # update loc and hpr display
         pos = base.camera.getPos()
