@@ -111,6 +111,34 @@ MagicWLD =  0x54503D02
 
 from fragment import *
 
+   
+class WLDContainer():
+    
+    def __init__(self, zone, wld, s3d):
+        self.name = zone.name
+        self.zone = zone
+        self.wld_file_obj = wld # the in memory WLDFile object
+        self.s3d_file_obj = s3d # the in memory S3DFile object that the wld_file_object was loaded from
+        self.sprites = {}       # SPRITE objects (1-n multitexture groups), indexed by 0x31 fragment index number
+                                # as referenced in our meshes
+        
+    def getSprite(self, index):
+        if self.sprites.has_key(index):
+            return self.sprites[index]
+        
+        return None
+
+    # find the sprite using the texture passed in as a parameter
+    def findSpriteUsing(self, t):
+        # print 'SEARCHING texture:', t
+        for sprite in self.sprites.values():
+            for texture in sprite.textures:
+                # print 'looking at sprite texture:', texture
+                if texture == t:
+                    # print 'M A T C H'
+                    return sprite
+                    
+        return None
         
 class WLDFile():
     
@@ -272,7 +300,7 @@ class WLDFile():
             print 'fragment type:0x%x count:%i' % (k, self.fragment_type_counts[k])
         '''
         print 'WLDFile load complete.'
-        print 'name0:', self.getName(-1)
+        # print 'name0:', self.getName(-1)
     
     def getFragment(self, idx_plus_1):
         # Note on fragment references

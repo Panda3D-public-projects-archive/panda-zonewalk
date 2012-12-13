@@ -59,7 +59,7 @@ from zone import Zone
 from config import Configurator
 from filedialog import FileDialog
 
-VERSION = '0.0.6'
+VERSION = '0.0.7'
 
 # Function to put instructions on the screen.
 def addInstructions(pos, msg):
@@ -140,13 +140,13 @@ class World(DirectObject):
         render.setLight(render.attachNewNode(directionalLight))
         
         # create a point light that will follow our view point (the camera for now)
-        # this basically works like additional ambient lights, softening the contrasts
+        # attenuation is set so that this point light has a torch like effect
         self.plight = PointLight('plight')
-        self.plight.setColor(VBase4(.2, .2, .2, 1))
-        # self.plight.setAttenuation(Point3(0, 0, .5))
+        self.plight.setColor(VBase4(1.0, 1.0, 0.2, 1.0))
+        self.plight.setAttenuation(Point3(0.0, 0.0, 0.0005))
         
-        self.plnp = render.attachNewNode(self.plight)
-        self.plnp.setPos(0, 0, self.eyeHeight)
+        self.plnp = base.camera.attachNewNode(self.plight)
+        self.plnp.setPos(0, 0, 0)
         render.setLight(self.plnp)
         
         self.keyMap = {"left":0, "right":0, "forward":0, "backward":0, "cam-left":0, \
@@ -340,7 +340,7 @@ class World(DirectObject):
 
         # actually move the camera
         base.camera.setPos(self.campos)
-        self.plnp.setPos(self.campos)      # move the point light with the viewer position
+        # self.plnp.setPos(self.campos)      # move the point light with the viewer position
 
         # WALKMODE: simple collision detection
         # we simply check a ray from slightly below the "eye point" straight down
