@@ -28,7 +28,23 @@ WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWIS
 OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
+-------------------------------------------------------------------------------
+ZONE REFERENCE NOTES
+-------------------------------------------------------------------------------
 
+Old Style zones (s3d based)
+-------------------------------
+
+Usually consist of 3 s3d files: shortname.s3d shortname_chr.s3d shortname_obj.s3d
+For some zones, probably when adding additional placeable model types like the jaggedpine forrest
+portal crystal in surefall glade (qrg), an additional shortname_2_obj.s3d file exists
+
+The main (shortname.s3d) s3d file contains a bunch of textures and 3 .wld files
+    - shortname.wld : this is the main zone geometry
+    - objects.wld : placeable objects placements
+    - lights.wld : well, duh, lights
+    
+    
 '''
 
 
@@ -45,26 +61,33 @@ from s3dfile import S3DFile
 from wldfile import WLDFile, WLDContainer
 from ddsfile import DDSFile
 from polygroup import PolyGroup
+from model import Model
 from mesh import Mesh
 from sprite import Sprite
 
 
-
-    
 class Zone():
 
     def __init__(self, world, name, basedir):
         self.world = world
         self.name = name
         self.basedir = basedir
+        self.load_complete = 0
         
         self.world.consoleOut('zone initializing: '+self.name)
+
+        # store the in memory WLDFile objects that make uo the zone for direct access
+        self.wld_containers = {}        # and as a directory
+        self.zone_wld_container = None
+        self.obj1_wld_container = None
+        self.obj2_wld_container = None
+        self.chr_wld_container  = None
         
         self.textures = {}      # dictionary of panda3d Texure() objects, indexed by texture name
         self.nulltex = Texture()  # create dummy exture object for use in non textured polys
 
         self.meshes = []
-        self.wld_containers = {}
+        self.models = {}
         
         self.rootNode = NodePath(PandaNode("zone_root"))
         self.rootNode.reparentTo(render)
@@ -73,6 +96,9 @@ class Zone():
         
     # This currently only updates the direct zone sprites
     def update(self):
+        if self.load_complete != 1:
+            return
+            
         # print 'update delta_t:', globalClock.getDt()
         self.delta_t += globalClock.getDt()
         if self.delta_t > 0.2:
@@ -95,7 +121,7 @@ class Zone():
                 # print 'adding fragment_36 to main zone mesh'
                 # f.dump()
                 m = Mesh(self.name)
-                m.buildFromFragment(f, wld_container)
+                m.buildFromFragment(f, wld_container, True)
                 self.meshes.append(m)
                     
     # dump .bmp file header info
@@ -128,7 +154,7 @@ class Zone():
         bm_hdr = struct.pack('<2siii', magic, new_size, dummy, new_offset)       
         bm_info_hdr = struct.pack('<iIIhhiiIIii', biSize, biWidth, biHeight, biPlanes, biBitCount, biCompression, biSizeImage, dummy1, dummy2, biClrUsed, biClrImportant)
         new_bm_hdr = bm_hdr + bm_info_hdr
-        self.dumpBMPInfo(new_bm_hdr)
+        # self.dumpBMPInfo(new_bm_hdr)
         return new_bm_hdr
         
     # some of the ancient texture files in the old s3d archives even use short color tables
@@ -137,7 +163,7 @@ class Zone():
     def checkBmp(self, bm, name):
         (magic, size, dummy, offset) = struct.unpack('<2siii', bm[0:14])
         if offset != 1078:  # the "normal" offset for a palletized 8 bit image (1024 palette+54 header)
-            print 'Patching up Panda3D incompatible .bmp texture:', name
+            # print 'Patching up Panda3D incompatible .bmp texture:', name
     
             color_table = bm[54:offset]     # extract original color table
             image_data = bm[offset:size]    # extract original image data
@@ -218,7 +244,8 @@ class Zone():
             if not self.textures.has_key(name):
                 self.textures[name] = t  # and finally store
             else:
-                print 'Not storing duplicate texture:', name
+                pass
+                # print 'Not storing duplicate texture:', name
             
         
     def prepTextureName(self, name):
@@ -229,6 +256,8 @@ class Zone():
             
         return n
         
+    # preloadWldTextures actually does quite a bit more than just preloading texture files
+    # the main task of this code is to generate our SPRITES
     # Params
     # wld_container is a WldContainer object
     def preloadWldTextures(self, wld_container):
@@ -421,7 +450,9 @@ class Zone():
         
     # load up everything related to this zone
     def load(self):
+        
         # ---- ZONE GEOMETRY ----
+        
         # load main zone s3d
         s3dfile_name = self.name+'.s3d'
         self.world.consoleOut('zone loading zone s3dfile: ' + s3dfile_name)
@@ -435,28 +466,71 @@ class Zone():
         
         # load main zone wld
         wldZone = WLDFile(self.name)
+        # wldZone.setDumpList([0x14, 0x15])
         wldZone.load(s3d)
-        self.zone_wld_container = WLDContainer(self, wldZone, s3d)
+        self.zone_wld_container = WLDContainer('zone', self, wldZone, s3d)
         self.wld_containers['zone'] = self.zone_wld_container
 
-        # ---- PLACEABLES ----
-        '''
+        # load the objects.wld file from the same container
+        # this basically consists of 0x15 model references for putting all placeables in place
+        wldZoneObj = WLDFile('objects')
+        # wldZoneObj.setDumpList([0x14, 0x15])
+        wldZoneObj.load(s3d)
+        self.zone_obj_wld_container = WLDContainer('zone_obj', self, wldZone, s3d)
+        self.wld_containers['zone_obj'] = self.zone_wld_container
+
+        # ---- placeables definitions ------------------------------------
+        
         s3dfile_name = self.name+'_obj.s3d'
+        print '-------------------------------------------------------------------------------------'
         self.world.consoleOut('zone loading placeable objects s3dfile: ' + s3dfile_name)
         
-        self.s3d_obj1 = S3DFile(self.basedir+self.name+'_obj')
-        if self.s3d_obj1.load() != 0:
-            self.world.consoleOut( 'ERROR loading s3dfile:' + self.basedir+s3dfile_name)
-            return -1
-        self.s3d_obj1.dumpListing()
-        self.wldObj1 = WLDFile(self.name+'_obj')
-        self.wldObj1.load(self.s3d_obj1)
-        self.wld_containers['obj1'] = self.wldObj1
-        '''
+        s3d = S3DFile(self.basedir+self.name+'_obj')
+        if s3d.load() == 0:
+            # s3d.dumpListing()
+            wldObj1 = WLDFile(self.name+'_obj')
+            # wldObj1.setDumpList([0x14, 0x15, 0x2D, 0x36])
+            wldObj1.load(s3d)
+            self.obj1_wld_container = WLDContainer('obj', self, wldObj1, s3d)
+            self.wld_containers['obj1'] = self.obj1_wld_container
+        else:
+            self.world.consoleOut( 'zone object 1 s3dfile does not exist:' + self.basedir+s3dfile_name)
+        
+        s3dfile_name = self.name+'_2_obj.s3d'
+        print '-------------------------------------------------------------------------------------'
+        self.world.consoleOut('zone loading placeable objects s3dfile: ' + s3dfile_name)
+        
+        s3d = S3DFile(self.basedir+self.name+'_2_obj')
+        if s3d.load() == 0:
+            # s3d.dumpListing()
+            wldObj2 = WLDFile(self.name+'_2_obj')
+            # wldObj2.setDumpList([0x14, 0x15, 0x2D, 0x36])
+            wldObj2.load(s3d)
+            self.obj2_wld_container = WLDContainer('obj', self, wldObj2, s3d)
+            self.wld_containers['obj2'] = self.obj2_wld_container
+        else:
+            self.world.consoleOut( 'zone object 2 s3dfile does not exist:' + self.basedir+s3dfile_name)
+        
+        s3dfile_name = self.name+'_chr.s3d'
+        print '-------------------------------------------------------------------------------------'
+        self.world.consoleOut('zone loading character s3dfile: ' + s3dfile_name)
+        
+        s3d = S3DFile(self.basedir+self.name+'_chr')
+        if s3d.load() == 0:
+            # s3d.dumpListing()
+            wldChr = WLDFile(self.name+'_chr')
+            # wldChr.setDumpList([0x14, 0x15, 0x2D, 0x36])
+            wldChr.load(s3d)
+            self.chr_wld_container = WLDContainer('chr', self, wldChr, s3d)
+            self.wld_containers['chr'] = self.chr_wld_container
+        else:
+            self.world.consoleOut( 'zone character s3dfile does not exist:' + self.basedir+s3dfile_name)
         
         # --- TEXTURES ----
         self.world.consoleOut('preloading textures')
         self.preloadTextures()
+        
+        # ---- Generate main Zone Geometry ----
         self.world.consoleOut( 'preparing zone mesh')
         self.prepareZoneMesh()
 
@@ -471,7 +545,30 @@ class Zone():
                     
         # COLLISION:
         # The following makes the complete zone base geometry eligible for collisions
-        # this is of course extremely inefficient. TODO
+        # this is of course extremely inefficient. TODO: at some point we need to use the
+        # bsp structures already provided in the wld file to optimize whats in our scene graph
+        # and also to build a more intelligent collision system
         self.rootNode.setCollideMask(BitMask32.bit(0)) 
 
+        # ---- load MODELS and spawn placeables -----------------------
+        
+        # go through all the 0x15 refs and create empty model "shells"
+        # for every unique entry
+        self.world.consoleOut( 'loading models')
+        for f in wldZoneObj.fragments.values():
+            if f.type == 0x15:
+                name = f.refName
+                if not self.models.has_key(name):
+                    m = Model(name)
+                    self.models[name] = m
+        
+        for model in self.models.values():
+            model.load(self.wld_containers)
+            
+        # now actually load the models
+        
+        
+        print 'zone load complete'
+        self.load_complete = 1
+        
         return 0

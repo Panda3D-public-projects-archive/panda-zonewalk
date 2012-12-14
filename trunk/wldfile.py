@@ -53,41 +53,6 @@ WLD File structure
 Fragments reference
 --------------------
 
-Fragment types
-
-0x03 - Texture Bitmap Name(s)
-0x04 - Texture Bitmap Info
-0x05 - Texture Bitmap Info Reference
-0x06 - Two-dimensional Object
-0x07 - Two-dimensional Object Reference
-0x08 - Camera
-0x09 - Camera Reference
-0x10 - Skeleton Track Set
-0x11 - Skeleton Track Set Reference
-0x12 - Mob Skeleton Piece Track
-0x13 - Mob Skeleton Piece Track Reference
-0x14 - Static or Animated Model Reference/Player Info
-0x15 - Object Location
-0x16 - Zone Unknown
-0x17 - Polygon Animation?
-0x18 - Polygon Animation Reference?
-0x1B - Light Source
-0x1C - Light Source Reference
-0x21 - BSP Tree
-0x22 - BSP Region
-0x28 - Light Info
-0x29 - Region Flag
-0x2A - Ambient Light
-0x2C - Alternate Mesh
-0x2D - Mesh Reference
-0x2F - Mesh Animated Vertices Reference
-0x30 - Texture
-0x31 - Texture List
-0x32 - Vertex Color
-0x33 - Vertex Color Reference
-0x35 - First Fragment
-0x36 - Mesh
-0x37 - Mesh Animated Vertices
 
 Fragment Structures
 
@@ -114,8 +79,10 @@ from fragment import *
    
 class WLDContainer():
     
-    def __init__(self, zone, wld, s3d):
-        self.name = zone.name
+    # type can be 'zone_obj', 'zone', 'obj' or 'chr'
+    def __init__(self, type, zone, wld, s3d):
+        self.type = type
+        self.name = wld.name
         self.zone = zone
         self.wld_file_obj = wld # the in memory WLDFile object
         self.s3d_file_obj = s3d # the in memory S3DFile object that the wld_file_object was loaded from
@@ -152,11 +119,17 @@ class WLDFile():
         self.names = None   # decoded namehash
         self.fragment_decoders = { 
             0x36 : self.decode0x36, 0x03 : self.decode0x03, 0x31 : self.decode0x31,
-            0x30 : self.decode0x30, 0x05 : self.decode0x05, 0x04 : self.decode0x04
+            0x30 : self.decode0x30, 0x05 : self.decode0x05, 0x04 : self.decode0x04,
+            0x14 : self.decode0x14, 0x15 : self.decode0x15, 0x2D : self.decode0x2D
             }
             
         self.fragment_type_counts = {}
         self.fragments = {}
+        
+        self.dump_list = []     # list of fragment types to dump while loading
+        
+    def setDumpList(self, list):
+        self.dump_list = list
         
     # this simple hash encoder/decoder is used for the contents of the names string table 
     # (hence its designation as "namehash") and for several other types of data inside the wld
@@ -203,32 +176,56 @@ class WLDFile():
         f = Fragment36(id, type, nameRef, self)
         self.fragments[f.id] = f
         f.decode(buf, offset)
-        # f.dump()
+        if type in self.dump_list:
+            f.dump()
     def decode0x31(self, id, type, nameRef, buf, offset):
         f = Fragment31(id, type, nameRef, self)
         self.fragments[f.id] = f
         f.decode(buf, offset)
-        # f.dump()
+        if type in self.dump_list:
+            f.dump()
     def decode0x30(self, id, type, nameRef, buf, offset):
         f = Fragment30(id, type, nameRef, self)
         self.fragments[f.id] = f
         f.decode(buf, offset)
-        # f.dump()
+        if type in self.dump_list:
+            f.dump()
+    def decode0x2D(self, id, type, nameRef, buf, offset):
+        f = Fragment2D(id, type, nameRef, self)
+        self.fragments[f.id] = f
+        f.decode(buf, offset)
+        if type in self.dump_list:
+            f.dump()
+    def decode0x15(self, id, type, nameRef, buf, offset):
+        f = Fragment15(id, type, nameRef, self)
+        self.fragments[f.id] = f
+        f.decode(buf, offset)
+        if type in self.dump_list:
+            f.dump()
+    def decode0x14(self, id, type, nameRef, buf, offset):
+        f = Fragment14(id, type, nameRef, self)
+        self.fragments[f.id] = f
+        f.decode(buf, offset)
+        if type in self.dump_list:
+            f.dump()
     def decode0x05(self, id, type, nameRef, buf, offset):
         f = Fragment05(id, type, nameRef, self)
         self.fragments[f.id] = f
         f.decode(buf, offset)
-        # f.dump()
+        if type in self.dump_list:
+            f.dump()
     def decode0x04(self, id, type, nameRef, buf, offset):
         f = Fragment04(id, type, nameRef, self)
         self.fragments[f.id] = f
         f.decode(buf, offset)
-        # f.dump()
+        if type in self.dump_list:
+            f.dump()
     def decode0x03(self, id, type, nameRef, buf, offset):
         f = Fragment03(id, type, nameRef, self)
         self.fragments[f.id] = f
         f.decode(buf, offset)
-        # f.dump()
+        if type in self.dump_list:
+            f.dump()
 
 
     # -------------------------------------------------------------------------
@@ -290,7 +287,7 @@ class WLDFile():
             # fragment data
             sum_len += fragment_len + 8 # add the len and type fields (but not the name field, see below)
             offset += 12                # skip header
-            offset += fragment_len-4    # for now simply skip, the fragment length seems to include the name field
+            offset += fragment_len-4    # skip to next fragment, the fragment length seems to include the name field
                                         # thus we need to subtract 4 
             frag_id += 1                # fragment id is simply its position in the file
         
@@ -321,3 +318,15 @@ class WLDFile():
                 return frag
         
         return None
+        
+    # find a fragment by its name
+    # we need to iterate over all our fragments: should this turn out to be too slow
+    # we need to implement a name directory that gets filled with data when we decode 
+    # our fragments initially
+    def getFragmentByName(self, name):
+        for f in self.fragments.values():
+            if f.name == name:
+                return f
+                
+        return None
+        

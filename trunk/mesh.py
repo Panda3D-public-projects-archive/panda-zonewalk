@@ -36,7 +36,9 @@ from panda3d.core import  Geom, GeomVertexData, GeomVertexFormat, GeomVertexWrit
 
 from polygroup import PolyGroup
               
-        
+
+# The Mesh class holds all the vertex data and references to the PolyGroups (GEOMs)
+# that make up one mesh, where a mesh is a more or less arbitrary piece of geometry
 class Mesh():
 
     def __init__(self, name):
@@ -64,7 +66,7 @@ class Mesh():
         
         
     # f is a 0x36 mesh fragment (see fragment.py for reference)
-    def buildFromFragment(self, f, wld_container):
+    def buildFromFragment(self, f, wld_container, attach_to_zone_root = False):
         
         # write vertex coordinates
         for v in f.vertexList:
@@ -102,7 +104,7 @@ class Mesh():
             pg = PolyGroup(self.vdata, tex_idx)
                         
             # pass fragment so that it can access the SPRITES
-            if pg.build(wld_container, f, poly_idx, n_polys, tex_idx) == 1:
+            if pg.build(wld_container, f, poly_idx, n_polys, tex_idx, attach_to_zone_root) == 1:
                 self.poly_groups.append(pg)
 
             poly_idx += n_polys            

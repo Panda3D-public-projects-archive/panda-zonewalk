@@ -126,24 +126,24 @@ class World(DirectObject):
         self.accept("escape", self.exitGame)
         
         # Create some lighting
-        ambient_level = .7
+        ambient_level = .6
         ambientLight = AmbientLight("ambientLight")
         ambientLight.setColor(Vec4(ambient_level, ambient_level, ambient_level, 1.0))
         render.setLight(render.attachNewNode(ambientLight))
 
 
-        direct_level = 1.0
+        direct_level = 0.8
         directionalLight = DirectionalLight("directionalLight")
         directionalLight.setDirection(Vec3(0.0, 0.0, -1.0))
         directionalLight.setColor(Vec4(direct_level, direct_level, direct_level, 1))
-        directionalLight.setSpecularColor(Vec4(1, 1, 1, 1))
+        directionalLight.setSpecularColor(Vec4(direct_level, direct_level, direct_level, 1))
         render.setLight(render.attachNewNode(directionalLight))
         
         # create a point light that will follow our view point (the camera for now)
         # attenuation is set so that this point light has a torch like effect
         self.plight = PointLight('plight')
-        self.plight.setColor(VBase4(1.0, 1.0, 0.2, 1.0))
-        self.plight.setAttenuation(Point3(0.0, 0.0, 0.0005))
+        self.plight.setColor(VBase4(0.8, 0.8, 0.8, 1.0))
+        self.plight.setAttenuation(Point3(0.0, 0.0, 0.0002))
         
         self.plnp = base.camera.attachNewNode(self.plight)
         self.plnp.setPos(0, 0, 0)

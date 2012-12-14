@@ -39,6 +39,9 @@ from panda3d.core import PandaNode, NodePath, TextureAttrib, TransparencyAttrib,
 
 # The PolyGroup defines a submesh in which all polygons use the same texture
 # Each PolyGroup is mapped directly to a Panda3D NodePath which gets the texture assigned
+#
+# In Panda3D terms each PolyGroup maps to a GEOM
+#
 class PolyGroup():
     
     # vdata is the Panda3D vertex data object created by the main Mesh
@@ -50,20 +53,16 @@ class PolyGroup():
         self.primitives = GeomTriangles(Geom.UHStatic)
         self.geom.addPrimitive(self.primitives)
         
-    # called by the sprite animation code to let us know we need to change our texture image
-    def animFrameChange(self, t):
-        return 
-        # print 'POLYGROUP ANIMATION UPDATE'
-        self.nodePath.setTexture(t, 1)
-            
-                
+        self.nodePath = None
+        
+
     # Parameters:
     # wld_container - WldContainer parent object
     # f             - the f36 fragment we are based on
     # start_index   - index of our first poly in the fragment's polyList polygon list
     # n_polys       - numer of polys to build
     # tex_idx       - index of the texture that all our polys share
-    def build(self, wld_container, f, start_index, n_polys, tex_idx):
+    def build(self, wld_container, f, start_index, n_polys, tex_idx, attach_to_zone_root=False):
 
         zone = wld_container.zone
         sprite = wld_container.getSprite(tex_idx)
@@ -79,14 +78,16 @@ class PolyGroup():
         self.node.addGeom(self.geom)
         
         # attach all our nodes under the zone's geometry root node
-        self.nodePath = zone.rootNode.attachNewNode(self.node)
-        
+        if attach_to_zone_root == True:
+            self.nodePath = zone.rootNode.attachNewNode(self.node)
+        else:
+            self.nodePath = NodePath(self.node)
+            
         # self.nodePath.setRenderModeWireframe()
         # self.nodePath.setRenderModeFilled()
         # self.nodePath.showBounds()
         
         self.nodePath.setPos(f.centerX, f.centerY,f.centerZ)    # translate to correct world position
-        
         self.nodePath.setAttrib(CullFaceAttrib.make(CullFaceAttrib.MCullCounterClockwise))
         # self.nodePath.setAttrib(CullFaceAttrib.make(CullFaceAttrib.MCullClockwise))
 
