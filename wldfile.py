@@ -86,26 +86,39 @@ class WLDContainer():
         self.zone = zone
         self.wld_file_obj = wld # the in memory WLDFile object
         self.s3d_file_obj = s3d # the in memory S3DFile object that the wld_file_object was loaded from
-        self.sprites = {}       # SPRITE objects (1-n multitexture groups), indexed by 0x31 fragment index number
-                                # as referenced in our meshes
         
-    def getSprite(self, index):
-        if self.sprites.has_key(index):
-            return self.sprites[index]
+        self.sprite_list = {}
+        self.animated_sprites = []  # Lists those sprites that are animated
+        
+    # SPITE LISTS represent the original structure of the 0x31 lists in a wld 
+    def getSprite(self, sprite_index, list_index):
+        if self.sprite_list.has_key(list_index):
+            sprite_list = self.sprite_list[list_index]
+            if sprite_list.has_key(sprite_index):
+                sprite_list = self.sprite_list[list_index]
+                return sprite_list[sprite_index]
+        else:
+            print 'ERROR invalid sprite list index:%i for sprite:%i in container:%s' % \
+                (list_index, sprite_index, self.name)
+            
+        #if self.sprites.has_key(index):
+        #    return self.sprites[index]
         
         return None
 
     # find the sprite using the texture passed in as a parameter
     def findSpriteUsing(self, t):
-        # print 'SEARCHING texture:', t
-        for sprite in self.sprites.values():
-            for texture in sprite.textures:
-                # print 'looking at sprite texture:', texture
-                if texture == t:
-                    # print 'M A T C H'
-                    return sprite
+        # print 'SEARCHING texture:', t, ' in container:', self.name, ' num lists:', str(len(self.sprite_list))
+        for slist in self.sprite_list.values():
+            for sprite in slist.values():
+                for texture in sprite.textures:
+                    # print 'looking at sprite texture:', texture
+                    if texture == t:
+                        # print 'M A T C H'
+                        return sprite
                     
         return None
+        
         
 class WLDFile():
     

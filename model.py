@@ -1,5 +1,6 @@
 '''
-model.py
+model.py, implements ModelManager and Model classes
+
 
 The model class is used to implement mobs, players and placeables
 (c) gsk 2012
@@ -29,27 +30,88 @@ OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMA
 
 '''
 
+from panda3d.core import PandaNode, NodePath, CullFaceAttrib
+from panda3d.core import Vec3
+
 from wldfile import WLDContainer
 from mesh import Mesh
 
 
+class ModelManager():
+    
+    # Params
+    # need to pass in the directory of all loaded wld containers for the zone
+    def __init__(self, zone):
+        self.zone = zone
+        self.models = {}
+        self.container_directory = zone.wld_containers
+        self.placeables_fragments = []
+       
+    # Params
+    # wld_file_obj is expected to be the "objects.wld" wld file found in the zone s3d files
+    # that lists all placeables
+    def loadPlaceables(self, wld_file_obj):
+        # We need to a.) find all distinct models referenced here and 
+        # b.) store the reference data so that we can actually spawn the placeables later on
+        for f in wld_file_obj.fragments.values():
+            if f.type == 0x15:
+                # f.dump()
+                self.placeables_fragments.append(f)     # store the f15 ref
+                name = f.refName
+                if not self.models.has_key(name):
+                    m = Model(self, name)
+                    self.models[name] = m
+        
+        # load all referenced models
+        for model in self.models.values():
+            model.load()
+            
+        # spawn placeables
+        for f in self.placeables_fragments:
+            model_name = f.refName
+            # print 'spawning placeable:', model_name+str(f.id)
+            model = self.models[model_name]
+            
+            p_node = PandaNode(model_name+str(f.id))
+            
+            # for now we attach a new parent node for every placeable directly under the zone root
+            np = self.zone.rootNode.attachNewNode(p_node)
+            np.setAttrib(CullFaceAttrib.make(CullFaceAttrib.MCullClockwise))
+
+            np.setPos(f.xpos, f.ypos, f.zpos )
+            np.setHpr(f.xrot / 512.0 * 360.0, f.yrot / 512.0 * 360.0, f.zrot / 512.0 * 360.0 )
+            
+            # NOTE on placeables scale: from what I've seen so far for placeables this seems to always
+            # be x=0.0 y=1.0 z=1.0
+            # No idea if this is a bug or intentional. For now we assume a unified scale for x/y being
+            # stored in yscale and one for z in zscale
+            # print 'scalex:%f scaley:%i scalez:%f' % (f.xscale, f.yscale, f.zscale )
+            np.setScale(f.yscale, f.yscale, f.zscale )
+            
+            # attach an instance of the model under the placeable's NodePath
+            model.mesh.root.instanceTo(np)
+
+    
+        
 class Model():
     
-    def __init__(self, name):
+    def __init__(self, mgr, name):
+        self.mm = mgr
         self.name = name
-        self.wld_container = None
+        self.wld_container = None   # the container we were loaded from
+        self.mesh = None
         
     # wld_containers : directory of wld container objects
-    def load(self, wld_containers):
-        print 'loading model:', self.name
+    def load(self):
+        # print 'loading model:', self.name
         
-        # find our 0x14 fragment in any of the "object" wld files in the container
+        # find our 0x14 fragment in any of the "object" wld files in the container directory
         f14 = None
-        for c in wld_containers.values():
+        for c in self.mm.container_directory.values():
             if c.type == 'obj':
                 f14 = c.wld_file_obj.getFragmentByName(self.name)
                 if f14 != None:
-                    self.wld_container = c  # ok , this is "our" wld_file_obj
+                    self.wld_container = c  # ok , this is "our" wld container
                     break;
         
         if f14 == None:
@@ -68,5 +130,6 @@ class Model():
         
         m = Mesh(self.name+'_mesh')
         m.buildFromFragment(f36, self.wld_container)
+        self.mesh = m
         
         

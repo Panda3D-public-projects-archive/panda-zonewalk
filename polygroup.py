@@ -53,6 +53,7 @@ class PolyGroup():
         self.primitives = GeomTriangles(Geom.UHStatic)
         self.geom.addPrimitive(self.primitives)
         
+        self.sprite_list_index = 0
         self.nodePath = None
         
 
@@ -62,10 +63,12 @@ class PolyGroup():
     # start_index   - index of our first poly in the fragment's polyList polygon list
     # n_polys       - numer of polys to build
     # tex_idx       - index of the texture that all our polys share
-    def build(self, wld_container, f, start_index, n_polys, tex_idx, attach_to_zone_root=False):
+    def build(self, wld_container, f, start_index, n_polys, tex_idx):
 
-        zone = wld_container.zone
-        sprite = wld_container.getSprite(tex_idx)
+        
+        # f.dump()
+        self.sprite_list_index = f.fragment1-1        # the fragment1 ref is used as sprite list index
+        sprite = wld_container.getSprite(tex_idx, self.sprite_list_index)
             
         polyList = f.polyList
         poly_idx = start_index
@@ -77,11 +80,8 @@ class PolyGroup():
         self.node = GeomNode(self.name)
         self.node.addGeom(self.geom)
         
-        # attach all our nodes under the zone's geometry root node
-        if attach_to_zone_root == True:
-            self.nodePath = zone.rootNode.attachNewNode(self.node)
-        else:
-            self.nodePath = NodePath(self.node)
+        # make a node path for our GEOM, these will be attached under our parent mesh's root
+        self.nodePath = NodePath(self.node)
             
         # self.nodePath.setRenderModeWireframe()
         # self.nodePath.setRenderModeFilled()

@@ -61,9 +61,11 @@ from s3dfile import S3DFile
 from wldfile import WLDFile, WLDContainer
 from ddsfile import DDSFile
 from polygroup import PolyGroup
-from model import Model
+from model import ModelManager, Model
 from mesh import Mesh
+from texture import TextureManager
 from sprite import Sprite
+
 
 
 class Zone():
@@ -75,19 +77,22 @@ class Zone():
         self.load_complete = 0
         
         self.world.consoleOut('zone initializing: '+self.name)
-
+            
         # store the in memory WLDFile objects that make uo the zone for direct access
         self.wld_containers = {}        # and as a directory
         self.zone_wld_container = None
         self.obj1_wld_container = None
         self.obj2_wld_container = None
         self.chr_wld_container  = None
+    
+        # init our texture manager
+        self.tm = TextureManager()
+
+        # init our model manager
+        self.mm = ModelManager(self)
         
-        self.textures = {}      # dictionary of panda3d Texure() objects, indexed by texture name
         self.nulltex = Texture()  # create dummy exture object for use in non textured polys
 
-        self.meshes = []
-        self.models = {}
         
         self.rootNode = NodePath(PandaNode("zone_root"))
         self.rootNode.reparentTo(render)
@@ -103,10 +108,8 @@ class Zone():
         self.delta_t += globalClock.getDt()
         if self.delta_t > 0.2:
             self.delta_t = 0
-            for sprite in self.zone_wld_container.sprites.values():
-                # if anim_delay > 0 this sprite is an animated texture
-                if sprite.anim_delay > 0:
-                    sprite.update()     # drive all sprite animation updates    
+            for sprite in self.zone_wld_container.animated_sprites:
+                sprite.update()     # drive all sprite animation updates    
         
         
     # build the main zone geometry mesh
@@ -121,178 +124,23 @@ class Zone():
                 # print 'adding fragment_36 to main zone mesh'
                 # f.dump()
                 m = Mesh(self.name)
-                m.buildFromFragment(f, wld_container, True)
-                self.meshes.append(m)
-                    
-    # dump .bmp file header info
-    def dumpBMPInfo(self, bm, name=''):
-        (magic, size, dummy, offset) = struct.unpack('<2siii', bm[0:14])
-        print 'bmp %s magic:%s size:%i offset:%i' % (name, magic, size, offset)
-        
-        (biSize, biWidth, biHeight, biPlanes, biBitCount, biCompression, biSizeImage, dummy1, dummy2, biClrUsed, biClrImportant) = \
-        struct.unpack('<iIIhhiiIIii', bm[14:14+40])
-        print 'biSize:%i biWidth:%i biHeight:%i biPlanes:%i biBitcount:%i biCompression:%i biSizeImage:%i biClrUsed:%i biClrImportant:%i' % \
-        (biSize, biWidth, biHeight, biPlanes, biBitCount, biCompression, biSizeImage, biClrUsed, biClrImportant)
-        
-    # Panda3D's PNImage loader cant deal with bmp files that have limited size palettes
-    # it only can process full size palletes (1024 bytes)
-    # Here we patch up the Bitmap header of a bmp from a s3d file to prepare it for extending the palette
-    # to the full size.
-    # NOTE that we dont touch the data in the bitmap info header (biSizeImage and biClrUsed in particular)
-    # so in effect the headers we produce here are corrupt
-    # The PNImage loader accepts the files though (more proof that it doesnt even correctly evaluate the header
-    # but simply assumes a std 1024 bytes pallete (and thus the std. 14+40+1024 = 1078 bytes offset)
+                m.buildFromFragment(f, wld_container)
+                m.root.reparentTo(self.rootNode)        # "hang" the mesh under our root node
 
-    def patchBmHeader(self, bm, new_offset):
-        (magic, size, dummy, offset) = struct.unpack('<2siii', bm[0:14])       
-        (biSize, biWidth, biHeight, biPlanes, biBitCount, biCompression, biSizeImage, dummy1, dummy2, biClrUsed, biClrImportant) = \
-        struct.unpack('<iIIhhiiIIii', bm[14:14+40])
-
-        size_diff = offset - new_offset
-        new_size = size + size_diff
-
-        bm_hdr = struct.pack('<2siii', magic, new_size, dummy, new_offset)       
-        bm_info_hdr = struct.pack('<iIIhhiiIIii', biSize, biWidth, biHeight, biPlanes, biBitCount, biCompression, biSizeImage, dummy1, dummy2, biClrUsed, biClrImportant)
-        new_bm_hdr = bm_hdr + bm_info_hdr
-        # self.dumpBMPInfo(new_bm_hdr)
-        return new_bm_hdr
         
-    # some of the ancient texture files in the old s3d archives even use short color tables
-    # (not the standard 256*4 = 1024 bytes). Panda3D's PNImage loader barfs on these. 
-    # Patch them up here
-    def checkBmp(self, bm, name):
-        (magic, size, dummy, offset) = struct.unpack('<2siii', bm[0:14])
-        if offset != 1078:  # the "normal" offset for a palletized 8 bit image (1024 palette+54 header)
-            # print 'Patching up Panda3D incompatible .bmp texture:', name
+    # ---------------------------------------------------------------------             
+    # create the SPRITE objects: these can reference a single texture or
+    # a list of them (for animated textures like water, lava etc.)
+    # we need to step through all entries of the 0x31 list fragment for the zone
+    # We store the SPRITEs using their index within the 0x31 fragments list as the key
+    # because this is exactly how the meshes (0x36 fragments) reference them
+    # The lists them selves are keyed by the 0x31 fragmemts id (=index in the diskfile)
+    def loadSpriteList(self, wld_container, f31):
     
-            color_table = bm[54:offset]     # extract original color table
-            image_data = bm[offset:size]    # extract original image data
-            
-            hdr = self.patchBmHeader(bm, 1078)  # fix up the bitmap header
-            new_bm = hdr + color_table + str(bytearray(1078-offset)) + image_data # assemble new bmp
-        else:
-            new_bm = bm     # leave it as is
-            
-        # file = open(name, 'wb')
-        # file.write(new_bm)
-        # file.close()
+        wld = wld_container.wld_file_obj
+        wld_container.sprite_list[f31.id] = {}
+        sprite_list = wld_container.sprite_list[f31.id]
         
-        return new_bm
-        
-    # Parameter f is a 0x03 type texture file definition fragment
-    # Note that we currently still store all textures (from all containers) into 
-    # a single zone wide dictionary. Need to watch closely if texture names are really unique
-    # and if not switch everything over to a store by container (or key more elaborately)
-    def loadTexture(self, texname, container):
-        # Note that we reference the texture files by name. The loader here
-        # loads textures only if they are not already in the dictionary. 
-        
-        # this currently only supports the .bmp files I found in the old (pre GOD?) s3d zone files
-        # texname = self.wldZone.getName(f.nameRef)
-        
-        # In typical windows style we'll encounter all types of mixed case names, even spelled
-        # differently in various fragments within the same file: Once again we simply enforce all lower case
-        # before using the name as a key
-        # This works by the assumption that texture names are unique 
-        # (and also case insensitive as s3d.getFile() enforces lower case on all names)
-        # texname = texname.lower()
-        
-        if not self.textures.has_key(texname):
-            # print 'loading texture:', texname
-            s3dentry = container.s3d_file_obj.getFile(texname)            
-            if s3dentry != None:
-                texfile = s3dentry.data
-                (magic,) = struct.unpack('<2s', texfile[0:2])
-                if magic == 'BM':
-                    # Generic BMP file
-                    texfile = self.checkBmp(texfile, texname)
-                    if texfile == None:
-                        return
-
-                    # self.dumpBMPInfo(texfile, texname)
-                    
-                    ts = StringStream(texfile)  # turn into an istream
-                    ti = PNMImage()             # create panda3d general purpose image object
-                    ti.read(ts)                 # load from istream
-                    
-                    t = Texture()               # create texture object
-                    t.load(ti)                  # load texture from pnmimage
-                elif magic == 'DD':
-                    # DDS file
-                    dds = DDSFile(texfile)
-                    dds.patchHeader()
-                    # dds.dumpHeader()
-                    # dds.uncompressToBmp()
-                    # dds.save(texname+'.dds')
-                    
-                    ts = StringStream(dds.buf)  # turn into an istream                   
-                    t = Texture()               # create texture object
-                    t.readDds(ts)               # load texture from dds ram image
-                else:
-                    print 'Error unsupported texture: %s magic:%s referenced in fragment: %i' % (texname, magic, f.id)
-                    return
-            else:
-                print 'Error: texture %s not found in s3d archive' % (texname)
-                return
-            
-            # t.setWrapU(Texture.WMClamp)
-            # t.setWrapV(Texture.WMClamp)
-            
-            # need to strip the extension (or do we? rather go back to storing with it? Need to 
-            # check how the PolyGroup code handles texture references once again)
-            name = self.prepTextureName(texname)
-            if not self.textures.has_key(name):
-                self.textures[name] = t  # and finally store
-            else:
-                pass
-                # print 'Not storing duplicate texture:', name
-            
-        
-    def prepTextureName(self, name):
-        n = name.lower()
-        i = name.find('.')
-        if i != -1:
-            n = n[0:i]
-            
-        return n
-        
-    # preloadWldTextures actually does quite a bit more than just preloading texture files
-    # the main task of this code is to generate our SPRITES
-    # Params
-    # wld_container is a WldContainer object
-    def preloadWldTextures(self, wld_container):
-        print 'preloading textures for container:', wld_container.name
-        wld = wld_container.wld_file_obj  # the in memory wld file
-        # loop over all 0x03 fragments and load all referenced texture files from the s3d
-        f31 = None
-        for f in wld.fragments.values():
-            if f.type == 0x03:
-                # f.dump()
-                
-                # NOTE
-                # in VERSION 2 WLD zones (ex. povalor, postorms) I've found texture names
-                # that have three parameters prepended like this for example: 1, 4, 0, POVSNOWDET01.DDS
-                # no idea yet as to what these mean but in order to be able to load the texture from 
-                # the s3d container we need to strip this stuff
-                for name in f.names:
-                    i = name.rfind(',')
-                    if i != -1:
-                        # See NOTE above
-                        print 'parametrized texture name found:%s wld version:0x%x' % (name, self.wldZone.version)
-                        name = name[i+1:].strip()
-            
-                    self.loadTexture(name.lower(), wld_container)
-                    
-                    
-            if f.type == 0x31:
-                f31 = f         # we'll need this one below 
-                # f31.dump()
-                
-        # create the SPRITE objects: these can reference a single texture or
-        # a list of them (for animated textures like water, lava etc.)
-        # we need to step through all entries of the 0x31 list fragment for the zone
-        # We store the SPRITEs using their index within the 0x31 fragments list as the key
-        # because this is exactly how the meshes (0x36 fragments) reference them
         idx = 0
         for ref30 in f31.nameRefs:
             sprite_error = 0
@@ -322,40 +170,40 @@ class Zone():
             if frag != None:
                 if frag.type == 0x03:    # this is a direct 0x03 ref (see note above)
                     f03 = frag
-                    texfile_name = self.prepTextureName(f03.names[0])
-                    # print texfile_name
-                    if self.textures.has_key(texfile_name):
+                    texfile_name = f03.names[0]                   
+                    tx = self.tm.getTexture(texfile_name)
+                    if tx != None:
                         # we dont have a sprite def (0x04) for these, so we use the material (0x30) name
-                        sprite = Sprite(material_name, idx, f30.params1)
-                        sprite.addTexture(texfile_name, self.textures[texfile_name]) 
+                        sprite = Sprite(material_name, idx, f30.params1, self.tm)
+                        sprite.addTexture(texfile_name, tx) 
                     else:
                         sprite_error = 1
-                        print 'Error in Sprite:', material_name, 'Texure not found:', texfile_name                        
-                elif frag.type == 0x05:
+                        print 'Error in Sprite:', material_name, 'Texture not found:', texfile_name                        
+                elif frag.type == 0x05: # this is the "normal" indirection chain 0x30->0x05->0x04->0x03
                     f05 = frag
                     # f05.dump()
                     f04 = wld.getFragment(f05.frag04Ref)
                     # f04.dump()
 
                     name = wld.getName(f04.nameRef)
-                    sprite = Sprite(name, idx, f30.params1)
+                    sprite = Sprite(name, idx, f30.params1, self.tm)
                     sprite.setAnimDelay(f04.params2)
                     
                     for f03ref in  f04.frag03Refs:
                         f03 = wld.getFragment(f03ref)
                         # f03.dump()
                         # NOTE that this assumes the zone 0x03 fragments only ever reference one single texture
-                        texfile_name = self.prepTextureName(f03.names[0])
-                        # print texfile_name
-                        if self.textures.has_key(texfile_name):
-                            sprite.addTexture(texfile_name, self.textures[texfile_name]) 
+                        texfile_name = f03.names[0]
+                        tx = self.tm.getTexture(texfile_name)
+                        if tx != None:
+                            sprite.addTexture(texfile_name, tx) 
                         else:
                             sprite_error = 1
                             print 'Error in Sprite:', name, 'Texure not found:', texfile_name
                 else:
                     # This is the "does point nowhere meaningful at all" case
                     # infact the reference points back to the same fragment (circular)
-                    # This type of 0x30 fragment seem  to only have been used for zone boundary polygons
+                    # This type of 0x30 fragment seems  to only have been used for zone boundary polygons
                     # in the original EQ classic zones 
                     # Note that we create a sprite with just a dummy texture in it for these
                     
@@ -369,7 +217,7 @@ class Zone():
                     # this will be a sprite with just the dummy nulltex textures
                     # we need this so that transparent zonewalls in the very old classic zones work
                     # newer zones have actually textured ("collide.dds") zone walls
-                    sprite = Sprite(name, idx, f30.params1)
+                    sprite = Sprite(name, idx, f30.params1, self.tm)
                     sprite.addTexture('nulltexture', self.nulltex)
             else:
                 sprite_error = 1
@@ -377,12 +225,56 @@ class Zone():
 
             if sprite_error != 1:   # only add error free sprites
                 # sprite.dump()
-                wld_container.sprites[idx] = sprite
+                # new style sprite list
+                sprite_list[idx] = sprite
+                if sprite.anim_delay != 0:
+                    wld_container.animated_sprites.append(sprite)
                 
             idx += 1    # need to increment regardless of whether we stored or not
                         # so that the index lookup using the refs in the 0x36's works
     
-        print 'wld_container defines %i sprites' % (len(wld_container.sprites))
+        
+        
+    # preloadWldTextures actually does quite a bit more than just preloading texture files
+    # the main task of this code is to generate our SPRITES
+    # Params
+    # wld_container is a WldContainer object
+    def preloadWldTextures(self, wld_container):
+        print 'preloading textures for container:', wld_container.name
+        wld = wld_container.wld_file_obj  # the in memory wld file
+        
+        # loop over all 0x03 fragments and PRELOAD all referenced texture files from the s3d
+        f31 = None
+        f31_list = []
+        for f in wld.fragments.values():
+            if f.type == 0x03:
+                # f.dump()
+                
+                # NOTE
+                # in VERSION 2 WLD zones (ex. povalor, postorms) I've found texture names
+                # that have three parameters prepended like this for example: 1, 4, 0, POVSNOWDET01.DDS
+                # no idea yet as to what these mean but in order to be able to load the texture from 
+                # the s3d container we need to strip this stuff
+                for name in f.names:
+                    i = name.rfind(',')
+                    if i != -1:
+                        # See NOTE above
+                        print 'parametrized texture name found:%s wld version:0x%x' % (name, self.wldZone.version)
+                        name = name[i+1:].strip()
+            
+                    self.tm.loadTexture(name.lower(), wld_container)
+                    
+            # need to store the 0x31 texture lists        
+            if f.type == 0x31:
+                f31_list.append(f)
+                
+        # not all wld files define sprites
+        if len(f31_list) == 0:
+            return
+        
+        for f31 in f31_list:
+            self.loadSpriteList(wld_container, f31)
+        
         
     # preload the textures/sprites for all loaded containers
     def preloadTextures(self):
@@ -400,7 +292,7 @@ class Zone():
     # Remap the Textures in use for the main Zone Geometry
     def remapTextures(self):
         # -------------------------------------------------------------------------------------
-        # ANIMATED TEXTURE SETUP AND TRANSPARENCY
+        # ANIMATED TEXTURE SETUP AND TRANSPARENCY FOR ZONE GEOMETRY (NOT PLACEABLES etc!)
         # trying to evaluate the scene graph structure under our root node here
         # since flattenStrong() totally changes the structure of our scene from how we 
         # originally created it, we need to find a way to:
@@ -411,10 +303,8 @@ class Zone():
         # 
         # NOTE this code will fail if there is more than one sprite useing a single texture!
         # Not encountered this yet though.
-        # self.rootNode.ls()
-    
-        
-        self.world.consoleOut('setting up animated textures')        
+            
+        self.world.consoleOut('setting up animated textures for zone geometry')        
         for child in self.rootNode.getChildren():
             # print child
             geom_node = child.node()
@@ -476,8 +366,8 @@ class Zone():
         wldZoneObj = WLDFile('objects')
         # wldZoneObj.setDumpList([0x14, 0x15])
         wldZoneObj.load(s3d)
-        self.zone_obj_wld_container = WLDContainer('zone_obj', self, wldZone, s3d)
-        self.wld_containers['zone_obj'] = self.zone_wld_container
+        self.zone_obj_wld_container = WLDContainer('zone_obj', self, wldZoneObj, s3d)
+        self.wld_containers['zone_obj'] = self.zone_obj_wld_container
 
         # ---- placeables definitions ------------------------------------
         
@@ -498,7 +388,7 @@ class Zone():
         
         s3dfile_name = self.name+'_2_obj.s3d'
         print '-------------------------------------------------------------------------------------'
-        self.world.consoleOut('zone loading placeable objects s3dfile: ' + s3dfile_name)
+        self.world.consoleOut('zone loading placeable objects 2 s3dfile: ' + s3dfile_name)
         
         s3d = S3DFile(self.basedir+self.name+'_2_obj')
         if s3d.load() == 0:
@@ -533,13 +423,16 @@ class Zone():
         # ---- Generate main Zone Geometry ----
         self.world.consoleOut( 'preparing zone mesh')
         self.prepareZoneMesh()
-
+        
         # let Panda3D attempt to flatten the zone geometry (reduce the excessive
         # Geom count resulting from the layout of the .wld zone data as a huge
         # bunch of tiny bsp regions)
         self.world.consoleOut('flattening zone mesh geom tree')        
-        self.rootNode.flattenStrong()    
         
+        # self.rootNode.ls()
+        self.rootNode.flattenStrong()    
+        self.rootNode.ls()
+
         # texture->sprite remapping after the flatten above
         self.remapTextures()
                     
@@ -554,20 +447,11 @@ class Zone():
         
         # go through all the 0x15 refs and create empty model "shells"
         # for every unique entry
-        self.world.consoleOut( 'loading models')
-        for f in wldZoneObj.fragments.values():
-            if f.type == 0x15:
-                name = f.refName
-                if not self.models.has_key(name):
-                    m = Model(name)
-                    self.models[name] = m
+        self.world.consoleOut( 'loading placeables models')
+        self.mm.loadPlaceables(wldZoneObj)
+        # self.rootNode.ls()
         
-        for model in self.models.values():
-            model.load(self.wld_containers)
             
-        # now actually load the models
-        
-        
         print 'zone load complete'
         self.load_complete = 1
         

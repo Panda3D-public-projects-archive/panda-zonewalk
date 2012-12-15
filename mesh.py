@@ -33,6 +33,7 @@ OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMA
 
 
 from panda3d.core import  Geom, GeomVertexData, GeomVertexFormat, GeomVertexWriter
+from panda3d.core import PandaNode, NodePath
 
 from polygroup import PolyGroup
               
@@ -64,9 +65,10 @@ class Mesh():
         self.color = GeomVertexWriter(self.vdata, 'color')
         self.texcoord = GeomVertexWriter(self.vdata, 'texcoord')
         
+        self.root = NodePath(PandaNode(name+'_mesh'))
         
     # f is a 0x36 mesh fragment (see fragment.py for reference)
-    def buildFromFragment(self, f, wld_container, attach_to_zone_root = False):
+    def buildFromFragment(self, f, wld_container):
         
         # write vertex coordinates
         for v in f.vertexList:
@@ -104,9 +106,10 @@ class Mesh():
             pg = PolyGroup(self.vdata, tex_idx)
                         
             # pass fragment so that it can access the SPRITES
-            if pg.build(wld_container, f, poly_idx, n_polys, tex_idx, attach_to_zone_root) == 1:
+            if pg.build(wld_container, f, poly_idx, n_polys, tex_idx) == 1:
                 self.poly_groups.append(pg)
-
+                pg.nodePath.reparentTo(self.root)
+                
             poly_idx += n_polys            
         
         if poly_idx != f.polyCount or poly_idx != len(f.polyList):
