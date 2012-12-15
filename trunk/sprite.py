@@ -38,18 +38,35 @@ from panda3d.core import TextureAttrib
          
 class Sprite():
     
-    def __init__(self, name, idx, params1):
+    def __init__(self, name, idx, params1, textureManager):
         self.name = name
         self.index = idx
         self.params1 = params1
+        self.tm = textureManager
         
-        self.alpha = 0.4      # default transparency alpha applied to semi transparent textures
+        self.transparent = 0
+        self.masked = 0
+        self.alpha = 1.0 
 
+        # bit 2 set - semi transparent textures (water et al)
         if self.params1 & 0x00000004:
             self.transparent = 1
+            self.alpha = 0.4      # default transparency alpha applied to semi transparent textures
         else:
             self.transparent = 0
 
+        # bit 1 set - masked textures (trees etc) 
+        # seen several kinds with different params1 masks, common is always bit 1 set
+        # examples. Unsure what bits 2-4 mean
+        # bit    543210
+        # 0x13  - 10011
+        # 0xb   - 01011
+        # 0x17  - 10111
+        if self.params1 & 0x00000002:
+            print 'masked texture sprite:%s params:0x%x' % (name, self.params1)
+            self.masked = 1
+            
+        # fully transparent (zone boundaries)
         if not self.params1 & 0x80000000:
             self.transparent = 1
             self.alpha = 0.0         # these are completely transparent (=invisible)
@@ -96,6 +113,12 @@ class Sprite():
         self.anim_render_states.append(g)
         
     def addTexture(self, texname, texture):
+        # special case handling: if we are "masked" (old style bmp texture transparency for leaves etc)
+        if self.masked == 1:
+            # see if the texture manager has a "masked" version (with added alpha channel)
+            texname = 'masked-'+texname
+            texture = self.tm.getMaskedTexture(texname)
+            
         self.texnames.append(texname)
         self.textures.append(texture)
         self.numtex += 1

@@ -269,6 +269,9 @@ class Fragment36(Fragment):
         # print 'DECODING FRAGMENT id:%i type:0x%x name:%s' % (offset, self.type, f.wld.getName(self.nameRef))
         
         # read header data
+        # fragment1 is the 0x31 textures list for this mesh
+        # fragment2 is a 0x2f animated vertices fragment if this is a placeable
+        # fragment3 and 4 are more or less unknown at this point
         offset += 12    # skip over generic fragment header first
         (f.flags, f.fragment1, f.fragment2, f.fragment3, f.fragment4) = struct.unpack('<iiiii',buf[offset:offset+20])
         offset += 20
@@ -447,7 +450,8 @@ class Fragment15(Fragment):
         offset += 4
         if f.fragRef2 != 0:
             (f.params2, ) = struct.unpack('<i',  buf[offset:offset+4])
-            
+        else:
+            f.params2 = 0
         
     def dump(self):
         Fragment.dump(self)
@@ -456,7 +460,7 @@ class Fragment15(Fragment):
             (f.flags, f.fragRef1, self.refName, f.fragRef1 ) 
         print 'xpos:%f ypos:%f zpos:%f xrot:%f yrot:%f zrot:%f xscale:%f yscale:%f zscale:%f ' % \
             (f.xpos, f.ypos, f.zpos, f.xrot, f.yrot, f.zrot, f.xscale, f.yscale, f.zscale)
-        
+        print 'fragRef2:%i params2:%i' % (f.fragRef2, f.params2)
         
 # Static or animated Model (Placeable / Mob)
 class Fragment14(Fragment):

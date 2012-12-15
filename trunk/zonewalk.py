@@ -61,6 +61,7 @@ from filedialog import FileDialog
 
 VERSION = '0.0.7'
 
+
 # Function to put instructions on the screen.
 def addInstructions(pos, msg):
     return OnscreenText(text=msg, style=1, fg=(1,1,1,1),
