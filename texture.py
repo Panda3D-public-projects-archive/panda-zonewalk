@@ -37,10 +37,11 @@ from ddsfile import DDSFile
 
 class TextureContainer():
 
-    def __init__(self, name, panda_texture, texture_file):
+    def __init__(self, name, panda_texture, image_file, type):
         self. name = name
         self.panda_texture = panda_texture
-        self.texture_file = texture_file
+        self.image_file = image_file
+        self.image_type = type            # format type of the memory image ('DDS' or 'IMG')
         self.flags = 0x00000000
         
 class TextureManager():
@@ -57,27 +58,57 @@ class TextureManager():
             
         return n
 
-    def addTexture(self, name, panda_texture, texture_file):
+    def addTexture(self, name, panda_texture, texture_file, t_type):
         name = self.prepTextureName(name)
         if self.textures.has_key(name):
             print 'WARNING texture %s already exists, overwriting ...' % (name)
         
-        self.textures[name] = TextureContainer(name, panda_texture, texture_file)
+        self.textures[name] = TextureContainer(name, panda_texture, texture_file, t_type)
 
 
+    def maskImg(self, img, img_size):
+        # print 'SIZE:',img_size
+        (top_left_pixel,) = struct.unpack('<i', img[0:4])   # this is our transparent color
+        masked_img = ''
+        offset = 0
+        for i in range(0, img_size):
+            (pixel,) = struct.unpack('<i', img[offset:offset+4])
+            if pixel == top_left_pixel:
+                pixel &= 0x00ffffff     # set alpha to 0
+            
+            masked_img += struct.pack('<i', pixel)
+            offset += 4
+            
+        return masked_img
         
-    # masked textures are a HACK we use to implement the old style transparency for leaves etc.
-    # we take the orgiginal bmp and add an alpha channel
-    # 
+    # masked textures are a HACK we use to implement the old style transparency for leaves, fire etc.
+    # The texture loader turns all bmp textures into 32bit rgba true color images anyway
+    # we need to setup the alpha channel of those here in such a way that it masks out 
+    # the pixels that are supposed to be transparent
     def createMaskedTexture(self, name):
-        original_name = self.prepTextureName(name.lstrip('masked-'))
+        name = self.prepTextureName(name)
+        original_name = name[len('masked-'):]
         if self.textures.has_key(original_name):
             tc = self.textures[original_name]   # get the original texture
-            bm = tc.texture_file
-            alpha_bm = self.createAlphaBMP(bm, original_name)  # not really used yet, see below
+            bm = tc.image_file
+            img_type = tc.image_type
+            if img_type != 'IMG':
+                print 'ERROR in createMaskedTexture(): cant create masked texture from non IMG type image'
+                return None
+                
+            # print type(bm)
+            # print len(bm)
             
-            # FIXME: this just copies the original until our 32bit bmp maker is ready!
-            mtex = TextureContainer(name, tc.panda_texture, tc.texture_file)
+            # FIXME: this just copies the original right now! Need to implement the alpha-mask bit still
+            m_img = self.maskImg(bm, tc.panda_texture.getXSize() * tc.panda_texture.getYSize())
+
+            t = Texture()               # create empty texture object
+            component_type = Texture.TUnsignedByte
+            format = Texture.FRgba 
+            t.setup2dTexture(tc.panda_texture.getXSize(),tc.panda_texture.getYSize(), component_type, format)
+            t.setRamImage(m_img)
+            
+            mtex = TextureContainer(name, t, m_img, img_type)
             self.textures[name] = mtex
             return mtex
         else:
@@ -89,10 +120,12 @@ class TextureManager():
     def getMaskedTexture(self, name):
         tex = self.getTexture(name)
         if tex == None:
-            print 'need to create \"masked\" texture:', name
+            # print 'need to create \"masked\" texture:', name
             mtex = self.createMaskedTexture(name)
             return mtex.panda_texture
-            
+           
+        return tex
+        
     # returns the panda_texture for the named texture container (if it exists)
     def getTexture(self, name):
         name = self.prepTextureName(name)
@@ -119,30 +152,33 @@ class TextureManager():
             return  # texture already loaded before
         
         # print 'loading texture:', texname
+        t_type = ''
         s3dentry = container.s3d_file_obj.getFile(texname)            
         if s3dentry != None:
             texfile = s3dentry.data
             (magic,) = struct.unpack('<2s', texfile[0:2])
             if magic == 'BM':
+                t_type = 'IMG'      # raw 32 bit rgba
                 # Generic BMP file
+                # patch up the sometimes irregular bmp headers
                 texfile = self.checkBmp(texfile, texname)
                 if texfile == None:
                     return
-                    
-                # THIS DOES NOT WORK BECAUSE PANDA CHOKES ON 32BIT RGBA BMP FILES!
-                # NEED TO CHANGE TO CREATE .TIF or .TGA or whatnot sigh
-                # texfile = self.createAlphaBMP(texfile, texname)
                 
-                # self.writeBmpFile(texfile, texname)
-                # self.dumpBMPInfo(texfile, texname)
-                    
-                ts = StringStream(texfile)  # turn into an istream
-                ti = PNMImage()             # create panda3d general purpose image object
-                ti.read(ts)                 # load from istream
-                    
-                t = Texture()               # create texture object
-                t.load(ti)                  # load texture from pnmimage
+                # turn bmp into a 32bit rgba true color image
+                # returns a tuple of (img, width, height)
+                img = self.createAlphaBMP(texfile, texname)
+                texfile = img[0]   # so that the addTexture() at the bottom works
+                                    
+                t = Texture()               # create empty texture object
+                component_type = Texture.TUnsignedByte
+                format = Texture.FRgba 
+                t.setup2dTexture(img[1], img[2], component_type, format)
+                t.setRamImage(img[0])
+                #t.load(ti)                  # load texture from pnmimage
+                
             elif magic == 'DD':
+                t_type = 'DDS'
                 # DDS file
                 dds = DDSFile(texfile)
                 dds.patchHeader()
@@ -163,15 +199,16 @@ class TextureManager():
         # t.setWrapU(Texture.WMClamp)
         # t.setWrapV(Texture.WMClamp)
 
-        self.addTexture(texname, t, texfile)
+        self.addTexture(texname, t, texfile, t_type)
 
 
     # ================================================================
     # BMP TOOLS
     # ================================================================
 
-    # make a full 32bit rgba bmp from a palettized 8bit one
+    # make a full 32bit rgba image from a palettized 8bit BMP file image
     # name is without an extension
+    # Returns the raw image plus width and height as a tuple
     def createAlphaBMP(self, bm, name):
         # self.dumpBMPInfo(bm)
         # unpack the original header (54 bytes)
@@ -192,23 +229,20 @@ class TextureManager():
         # print len(palette)
         # palette = bytearray(palette)
         
-        # create 32 bit true color image 
-        img = None
+        # create 32 bit rgba true color image 
+        img = ''
         npixels = biWidth * biHeight
         pixel_index = offset
-        for i in range(0, npixels):
-            (pixel,) = struct.unpack('<b', bm[pixel_index:pixel_index+1])
-            
-            if img == None:
-                img = struct.pack('<i', palette[pixel])
-            else:
-                img += struct.pack('<i', palette[pixel])
                 
+        for i in range(0, npixels):
+            (pixel,) = struct.unpack('<b', bm[pixel_index:pixel_index+1])            
+            rgba = palette[pixel] | 0xff000000    # set alpha to fully opaque
+            img += struct.pack('<i', rgba)
             pixel_index += 1
             
-        print 'LEN image:%i' % len(img)
         
         # patch header 
+        '''
         offset = 54                 # true color images have no palette, thus just the header size as offset
         biSizeImage = npixels*4
         size = biSizeImage+offset
@@ -221,9 +255,10 @@ class TextureManager():
         new_bm_hdr = bm_hdr + bm_info_hdr
         
         bm = new_bm_hdr + img
-        # self.writeBMPFile(bm, name+'.bmp')
+        self.writeBMPFile(bm, name+'.bmp')
+        '''
         
-        return bm
+        return (img, biWidth, biHeight)
     
     # dump .bmp file header info
     def dumpBMPInfo(self, bm, name=''):
