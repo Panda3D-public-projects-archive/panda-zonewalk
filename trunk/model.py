@@ -30,7 +30,7 @@ OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMA
 
 '''
 
-from panda3d.core import PandaNode, NodePath, CullFaceAttrib
+from panda3d.core import PandaNode, NodePath, CullFaceAttrib, TransparencyAttrib
 from panda3d.core import Vec3
 
 from wldfile import WLDContainer
@@ -77,7 +77,11 @@ class ModelManager():
             # for now we attach a new parent node for every placeable directly under the zone root
             np = self.zone.rootNode.attachNewNode(p_node)
             np.setAttrib(CullFaceAttrib.make(CullFaceAttrib.MCullClockwise))
-
+            
+            # setting up texture alpha transparency for all models this way currently
+            # seems to work well with our "masked" textures at leaser
+            np.setTransparency(TransparencyAttrib.MAlpha)
+            
             np.setPos(f.xpos, f.ypos, f.zpos )
             np.setHpr(f.xrot / 512.0 * 360.0, f.yrot / 512.0 * 360.0, f.zrot / 512.0 * 360.0 )
             

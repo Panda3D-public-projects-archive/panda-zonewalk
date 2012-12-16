@@ -114,8 +114,9 @@ class Sprite():
         
     def addTexture(self, texname, texture):
         # special case handling: if we are "masked" (old style bmp texture transparency for leaves etc)
+        
         if self.masked == 1:
-            # see if the texture manager has a "masked" version (with added alpha channel)
+            # see if the texture manager has a "masked" version
             texname = 'masked-'+texname
             texture = self.tm.getMaskedTexture(texname)
             

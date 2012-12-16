@@ -217,7 +217,7 @@ class Zone():
                     # this will be a sprite with just the dummy nulltex textures
                     # we need this so that transparent zonewalls in the very old classic zones work
                     # newer zones have actually textured ("collide.dds") zone walls
-                    sprite = Sprite(name, idx, f30.params1, self.tm)
+                    sprite = Sprite(material_name, idx, f30.params1, self.tm)
                     sprite.addTexture('nulltexture', self.nulltex)
             else:
                 sprite_error = 1
@@ -240,7 +240,7 @@ class Zone():
     # Params
     # wld_container is a WldContainer object
     def preloadWldTextures(self, wld_container):
-        print 'preloading textures for container:', wld_container.name
+        self.world.consoleOut('preloading textures for container: '+ wld_container.name)
         wld = wld_container.wld_file_obj  # the in memory wld file
         
         # loop over all 0x03 fragments and PRELOAD all referenced texture files from the s3d
@@ -319,15 +319,24 @@ class Zone():
                     if sprite != None:
                         # print sprite
                         
-                        if sprite.transparent == 1:
+                        # set general texture alpha based tansparency for masked textures
+                        # if sprite.masked == 1:
+                        #     child.setTransparency(TransparencyAttrib.MAlpha)
+
+                        if sprite.transparent == 1 or sprite.masked == 1:
                             # EXPERIMENTAL TRANSPARENCY SUPPORT ###############
+                            # This is for semi-transparent polygons (water surfaces etc) 
+                            # we implement the transparency via the alpha component of the GEOM's ColorAttrib
                             ta = TransparencyAttrib.make(TransparencyAttrib.MAlpha)
                             geom_render_state = geom_render_state.setAttrib(ta, 1)  # potentialy needs passing "int override" (=1?) as second param
-                            ca = ColorAttrib.makeFlat(Vec4(1, 1, 1, sprite.alpha))
-                            geom_render_state = geom_render_state.setAttrib(ca, 1)  # potentialy needs passing "int override" (=1?) as second param
+                            
+                            if not sprite.masked == 1:
+                                ca = ColorAttrib.makeFlat(Vec4(1, 1, 1, sprite.alpha))
+                                geom_render_state = geom_render_state.setAttrib(ca, 1)  # potentialy needs passing "int override" (=1?) as second param
+                            
                             geom_node.setGeomState(geom_number, geom_render_state)
                             # #####################################################
-
+    
                         if sprite.anim_delay > 0:
                             # ANIMATED SPRITE
                             # sprite.addAnimGeomRenderState((geom_node, geom_number, geom_render_state))
