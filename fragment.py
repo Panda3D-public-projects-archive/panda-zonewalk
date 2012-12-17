@@ -245,7 +245,7 @@ Placeable objects
 
 import struct, array
 
-import file.wldfile as WLD
+import file.wldfile
 
 class Fragment():
     def __init__(self, id, type, nameRef, wld):
