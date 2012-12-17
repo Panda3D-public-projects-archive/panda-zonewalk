@@ -60,11 +60,11 @@ from panda3d.core import CollisionNode, CollisionSolid
 from file.s3dfile import S3DFile
 from file.wldfile import WLDFile, WLDContainer
 from file.ddsfile import DDSFile
-from polygroup import PolyGroup
-from model import ModelManager, Model
-from mesh import Mesh
-from texture import TextureManager
-from sprite import Sprite
+from gfx.polygroup import PolyGroup
+from gfx.model import ModelManager, Model
+from gfx.mesh import Mesh
+from gfx.texture import TextureManager
+from gfx.sprite import Sprite
 
 
 
