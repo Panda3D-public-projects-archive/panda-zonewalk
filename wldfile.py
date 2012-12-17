@@ -321,7 +321,10 @@ class WLDFile():
         # finally we need to look through all our fragments to find one with matches the name
         # whoever invented this nonsense should be bitch slapped silly
         if idx_plus_1 > 0:
-            return self.fragments[idx_plus_1 - 1]
+            try:
+                return self.fragments[idx_plus_1 - 1]
+            except:
+                return None
         
         nameRef = (idx_plus_1)-1
         name = self.getName(nameRef)   # getName() expects a negated index, so we can pass as is

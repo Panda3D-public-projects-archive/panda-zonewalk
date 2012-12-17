@@ -46,7 +46,7 @@ from panda3d.core import CollisionTraverser,CollisionNode
 from panda3d.core import CollisionHandlerQueue,CollisionRay
 from panda3d.core import Filename,AmbientLight,DirectionalLight, PointLight
 from panda3d.core import Vec3, Vec4, Point3, VBase4, BitMask32
-from panda3d.core import PStatClient
+from panda3d.core import Fog, PStatClient
 
 from direct.gui.OnscreenText import OnscreenText
 from direct.actor.Actor import Actor
@@ -59,7 +59,7 @@ from zone import Zone
 from config import Configurator
 from filedialog import FileDialog
 
-VERSION = '0.0.7'
+VERSION = '0.1.0'
 
 
 # Function to put instructions on the screen.
@@ -115,10 +115,11 @@ class World(DirectObject):
         # Post the instructions
         self.title = addTitle('zonewalk v.' + VERSION)
         self.inst0 = addInstructions(0.95, "[FLYMODE][1]")
-        self.inst1 = addInstructions(-0.95, "Press F to toggle flymode on/off, 1-5 to set speed. Camera control with WSAD/mouselook, L-key to load a zone, ESC to exit.")
+        self.inst1 = addInstructions(-0.95, "Camera control with WSAD/mouselook. Press K for hotkey list, ESC to exit.")
         self.inst2 = addInstructions(0.9,  "Loc:")
         self.inst3 = addInstructions(0.85, "Hdg:")
         self.error_inst = addInstructions(0, '')
+        self.kh = []
         
         self.campos = Point3(155.6, 41.2, 4.93)
         base.camera.setPos(self.campos)
@@ -131,7 +132,6 @@ class World(DirectObject):
         ambientLight = AmbientLight("ambientLight")
         ambientLight.setColor(Vec4(ambient_level, ambient_level, ambient_level, 1.0))
         render.setLight(render.attachNewNode(ambientLight))
-
 
         direct_level = 0.8
         directionalLight = DirectionalLight("directionalLight")
@@ -149,15 +149,25 @@ class World(DirectObject):
         self.plnp = base.camera.attachNewNode(self.plight)
         self.plnp.setPos(0, 0, 0)
         render.setLight(self.plnp)
+        self.cam_light = 1
         
         self.keyMap = {"left":0, "right":0, "forward":0, "backward":0, "cam-left":0, \
             "cam-right":0, "mouse3":0, "flymode":1 }
 
+        self.fog_colour = (0.8,0.8,0.8,1.0)
+        linfog = Fog("A linear-mode Fog node")
+        linfog.setColor(self.fog_colour)
+        linfog.setLinearRange(700, 980)         # onset, opaque distances as params
+        # linfog.setLinearFallback(45,160,320)
+        base.camera.attachNewNode(linfog)
+        render.setFog(linfog)
+        
         # camera control
         self.campos = Point3(0, 0, 0)
         self.camHeading = 0.0
         self.camPitch = 0.0
         base.camLens.setFov(65.0)
+        base.camLens.setFar(1000) 
         
         self.cam_speed = 0  # index into self.camp_speeds
         self.cam_speeds = [40.0, 80.0, 160.0, 320.0, 640.0]
@@ -235,6 +245,8 @@ class World(DirectObject):
             self.accept("4", self.setSpeed, ["speed", 3])
             self.accept("5", self.setSpeed, ["speed", 4])
 
+            self.accept("t", self.camLightToggle)
+            self.accept("k", self.displayKeyHelp)
             self.accept("f", self.toggleFlymode)
             self.accept("l", self.reloadZone)
             self.accept("z", self.saveDefaultZone)
@@ -245,6 +257,7 @@ class World(DirectObject):
             self.accept("mouse3", self.setKey, ["mouse3",1])
             self.accept("s", self.setKey, ["backward",1])
         
+            self.accept("k-up", self.hideKeyHelp)
             self.accept("a-up", self.setKey, ["cam-left",0])
             self.accept("d-up", self.setKey, ["cam-right",0])
             self.accept("w-up", self.setKey, ["forward",0])
@@ -258,6 +271,57 @@ class World(DirectObject):
         self.cam_speed = value
         self.setFlymodeText()
         
+    def camLightToggle(self):
+        if self.cam_light == 0:
+            render.setLight(self.plnp)
+            self.cam_light = 1
+        else:
+            render.clearLight(self.plnp)
+            self.cam_light = 0
+        
+    def displayKeyHelp(self):
+        self.kh = []
+        msg = 'HOTKEYS:'
+        pos = 0.75
+        self.kh.append(OnscreenText(text=msg, style=1, fg=(1,1,1,1),
+                        pos=(-0.5, pos), align=TextNode.ALeft, scale = .04))
+        msg = '------------------'
+        pos -= 0.05
+        self.kh.append(OnscreenText(text=msg, style=1, fg=(1,1,1,1),
+                        pos=(-0.5, pos), align=TextNode.ALeft, scale = .04))
+        msg = 'W: camera fwd, S: camera bck, A: rotate view left, D: rotate view right'
+        pos -= 0.05
+        self.kh.append(OnscreenText(text=msg, style=1, fg=(1,1,1,1),
+                        pos=(-0.5, pos), align=TextNode.ALeft, scale = .04))
+        msg = '1-5: set camera movement speed'
+        pos -= 0.05
+        self.kh.append(OnscreenText(text=msg, style=1, fg=(1,1,1,1),
+                        pos=(-0.5, pos), align=TextNode.ALeft, scale = .04))
+        msg = 'F: toggle Flymode/Walkmode'
+        pos -= 0.05
+        self.kh.append(OnscreenText(text=msg, style=1, fg=(1,1,1,1),
+                        pos=(-0.5, pos), align=TextNode.ALeft, scale = .04))
+        msg = 'L: load a zone'
+        pos -= 0.05
+        self.kh.append(OnscreenText(text=msg, style=1, fg=(1,1,1,1),
+                        pos=(-0.5, pos), align=TextNode.ALeft, scale = .04))
+        msg = 'T: toggle additional camera "torch" light on/off'
+        pos -= 0.05
+        self.kh.append(OnscreenText(text=msg, style=1, fg=(1,1,1,1),
+                        pos=(-0.5, pos), align=TextNode.ALeft, scale = .04))
+        msg = 'Z: set currently loaded zone as new startup default'
+        pos -= 0.05
+        self.kh.append(OnscreenText(text=msg, style=1, fg=(1,1,1,1),
+                        pos=(-0.5, pos), align=TextNode.ALeft, scale = .04))
+        msg = 'ESC: exit zonewalk'
+        pos -= 0.05
+        self.kh.append(OnscreenText(text=msg, style=1, fg=(1,1,1,1),
+                        pos=(-0.5, pos), align=TextNode.ALeft, scale = .04))
+     
+    def hideKeyHelp(self):
+        for n in self.kh:
+            n.removeNode()
+                        
     def setFlymodeText(self):
         zname = ''
         if self.zone:
@@ -412,6 +476,7 @@ class World(DirectObject):
         if error == 0:
             self.consoleOff()
             self.setFlymodeText()
+            base.setBackgroundColor(self.fog_colour)
                 
     # initial world load after bootup
     def load(self):       
@@ -439,7 +504,7 @@ class World(DirectObject):
         cfg = self.configurator.config
         basepath = cfg['basepath']
         self.loadZone(name, basepath)
-        
+
     # form dialog callback
     # this gets called from the form when the user has entered a something
     # (hopefully a correct zone short name)
@@ -451,6 +516,7 @@ class World(DirectObject):
     # this is called when the user presses "l"
     # it disables normal controls and fires up our query form dialog
     def reloadZone(self):
+        base.setBackgroundColor((0,0,0))
         self.toggleControls(0)
         self.consoleOn()
         self.frmDialog = FileDialog(

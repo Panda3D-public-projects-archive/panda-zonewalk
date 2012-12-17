@@ -71,29 +71,29 @@ class ModelManager():
             model_name = f.refName
             # print 'spawning placeable:', model_name+str(f.id)
             model = self.models[model_name]
+            if model.loaded > 0:
+                p_node = PandaNode(model_name+str(f.id))
             
-            p_node = PandaNode(model_name+str(f.id))
+                # for now we attach a new parent node for every placeable directly under the zone root
+                np = self.zone.rootNode.attachNewNode(p_node)
+                np.setAttrib(CullFaceAttrib.make(CullFaceAttrib.MCullClockwise))
             
-            # for now we attach a new parent node for every placeable directly under the zone root
-            np = self.zone.rootNode.attachNewNode(p_node)
-            np.setAttrib(CullFaceAttrib.make(CullFaceAttrib.MCullClockwise))
+                # setting up texture alpha transparency for all models this way currently
+                # seems to work well with our "masked" textures at leaser
+                np.setTransparency(TransparencyAttrib.MAlpha)
             
-            # setting up texture alpha transparency for all models this way currently
-            # seems to work well with our "masked" textures at leaser
-            np.setTransparency(TransparencyAttrib.MAlpha)
+                np.setPos(f.xpos, f.ypos, f.zpos )
+                np.setHpr(f.xrot / 512.0 * 360.0, f.yrot / 512.0 * 360.0, f.zrot / 512.0 * 360.0 )
             
-            np.setPos(f.xpos, f.ypos, f.zpos )
-            np.setHpr(f.xrot / 512.0 * 360.0, f.yrot / 512.0 * 360.0, f.zrot / 512.0 * 360.0 )
+                # NOTE on placeables scale: from what I've seen so far for placeables this seems to always
+                # be x=0.0 y=1.0 z=1.0
+                # No idea if this is a bug or intentional. For now we assume a unified scale for x/y being
+                # stored in yscale and one for z in zscale
+                # print 'scalex:%f scaley:%i scalez:%f' % (f.xscale, f.yscale, f.zscale )
+                np.setScale(f.yscale, f.yscale, f.zscale )
             
-            # NOTE on placeables scale: from what I've seen so far for placeables this seems to always
-            # be x=0.0 y=1.0 z=1.0
-            # No idea if this is a bug or intentional. For now we assume a unified scale for x/y being
-            # stored in yscale and one for z in zscale
-            # print 'scalex:%f scaley:%i scalez:%f' % (f.xscale, f.yscale, f.zscale )
-            np.setScale(f.yscale, f.yscale, f.zscale )
-            
-            # attach an instance of the model under the placeable's NodePath
-            model.mesh.root.instanceTo(np)
+                # attach an instance of the model under the placeable's NodePath
+                model.mesh.root.instanceTo(np)
 
     
         
@@ -104,6 +104,7 @@ class Model():
         self.name = name
         self.wld_container = None   # the container we were loaded from
         self.mesh = None
+        self.loaded = 0
         
     # wld_containers : directory of wld container objects
     def load(self):
@@ -127,6 +128,9 @@ class Model():
         # note that this will need to be changed when we support animated mob models
         # for those f14.fragRefs does not point to a 0x2d frag but rather to a 0x11 anim track ref
         f2d = wld_file_obj.getFragment(f14.fragRefs3[0])
+        if f2d == None:
+            return  # for now we need to abort here because we dont support animated models yet!
+            
         # f2d.dump()
                     
         f36 = wld_file_obj.getFragment(f2d.fragRef)
@@ -135,5 +139,5 @@ class Model():
         m = Mesh(self.name+'_mesh')
         m.buildFromFragment(f36, self.wld_container)
         self.mesh = m
-        
+        self.loaded = 1
         
