@@ -57,9 +57,9 @@ from panda3d.core import PandaNode, NodePath, TextureAttrib, TransparencyAttrib,
 from panda3d.core import Vec4, BitMask32 
 from panda3d.core import CollisionNode, CollisionSolid
 
-from s3dfile import S3DFile
-from wldfile import WLDFile, WLDContainer
-from ddsfile import DDSFile
+from file.s3dfile import S3DFile
+from file.wldfile import WLDFile, WLDContainer
+from file.ddsfile import DDSFile
 from polygroup import PolyGroup
 from model import ModelManager, Model
 from mesh import Mesh

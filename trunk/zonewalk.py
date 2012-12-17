@@ -57,9 +57,9 @@ from pandac.PandaModules import WindowProperties
 
 from zone import Zone
 from config import Configurator
-from filedialog import FileDialog
+from gui.filedialog import FileDialog
 
-VERSION = '0.1.0'
+VERSION = '0.1.1'
 
 
 # Function to put instructions on the screen.

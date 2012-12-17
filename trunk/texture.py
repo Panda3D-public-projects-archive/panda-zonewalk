@@ -33,7 +33,7 @@ OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMA
 import struct
 
 from panda3d.core import PNMImage, Texture, StringStream
-from ddsfile import DDSFile
+from file.ddsfile import DDSFile
 
 class TextureContainer():
 

@@ -33,7 +33,7 @@ OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMA
 from panda3d.core import PandaNode, NodePath, CullFaceAttrib, TransparencyAttrib
 from panda3d.core import Vec3
 
-from wldfile import WLDContainer
+from file.wldfile import WLDContainer
 from mesh import Mesh
 
 
