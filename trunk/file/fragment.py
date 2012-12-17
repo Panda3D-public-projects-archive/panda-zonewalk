@@ -245,7 +245,7 @@ Placeable objects
 
 import struct, array
 
-import file.wldfile
+from file.wldfile import *
 
 class Fragment():
     def __init__(self, id, type, nameRef, wld):
@@ -299,13 +299,13 @@ class Fragment36(Fragment):
         # read texture u,v coordinates: careful, these differ between version 1 and 2 wld file
         self.uvList = []
         recip_255 = 1.0 / 256.0
-        if self.wld.version == WLD.Version1WLD:
+        if self.wld.version == Version1WLD:
             for i in range(0, f.texCoordsCount):    
                 vdata = struct.unpack('<hh', buf[offset:offset+4])
                 offset += 4
                 uvdata = array.array('f', (vdata[0]*recip_255, vdata[1]*recip_255))
                 self.uvList.append(uvdata)
-        if self.wld.version == WLD.Version2WLD:
+        if self.wld.version == Version2WLD:
             for i in range(0, f.texCoordsCount):    
                 vdata = struct.unpack('<ff', buf[offset:offset+8])
                 offset += 8
