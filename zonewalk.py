@@ -30,7 +30,7 @@ OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMA
 
 '''
 
-import os
+import os, asyncore
 import sys, copy, struct
 from math import pi, sin, cos
 
@@ -58,9 +58,11 @@ from pandac.PandaModules import WindowProperties
 from zone import Zone
 from config import Configurator
 from gui.filedialog import FileDialog
+from net.client import UDPClientStream
 
-VERSION = '0.1.1'
 
+
+VERSION = '0.1.2'
 
 # Function to put instructions on the screen.
 def addInstructions(pos, msg):
@@ -111,7 +113,8 @@ class World(DirectObject):
         base.win.requestProperties( self.winprops ) 
         base.disableMouse()
         
-                        
+        self.doLogin()
+        
         # Post the instructions
         self.title = addTitle('zonewalk v.' + VERSION)
         self.inst0 = addInstructions(0.95, "[FLYMODE][1]")
@@ -449,6 +452,8 @@ class World(DirectObject):
     def setKey(self, key, value):
         self.keyMap[key] = value
 
+    # -------------------------------------------------------------------------
+    # this is the mythical MAIN LOOP :)
     def update(self):
 
         if self.zone_reload_name != None:
@@ -457,8 +462,10 @@ class World(DirectObject):
 
         if self.zone != None:
             self.zone.update()
-            
+          
         taskMgr.step()
+        self.login_client.update()
+        
         
     # ZONE loading ------------------------------------------------------------
     
@@ -482,6 +489,9 @@ class World(DirectObject):
     def load(self):       
         cfg = self.configurator.config
         
+        if cfg.has_key('testnet'):
+            return
+            
         zone_name = cfg['default_zone']
         basepath = cfg['basepath']
         self.loadZone(zone_name, basepath)
@@ -526,6 +536,17 @@ class World(DirectObject):
         
         self.frmDialog.activate()   # relies on the main update loop to run
 
+    ###############################
+    # EXPERIMENTAL         
+    def doLogin(self):
+        
+        self.login_client = UDPClientStream('127.0.0.1', 5998)
+            
+        # session request: 
+        # opcode 0x0001, crc_len (the value is a guess), connection id, client udp packet size
+        session_request = struct.pack('!hiii', 0x0001, 2, 0, 496)
+        self.login_client.send(session_request)
+        
 
 # ------------------------------------------------------------------------------
 # main
