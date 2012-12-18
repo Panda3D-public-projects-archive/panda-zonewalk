@@ -90,7 +90,7 @@ class WLDContainer():
         self.sprite_list = {}
         self.animated_sprites = []  # Lists those sprites that are animated
         
-    # SPITE LISTS represent the original structure of the 0x31 lists in a wld 
+    # SPRITE LISTS represent the original structure of the 0x31 lists in a wld 
     def getSprite(self, sprite_index, list_index):
         if self.sprite_list.has_key(list_index):
             sprite_list = self.sprite_list[list_index]
@@ -315,7 +315,7 @@ class WLDFile():
     def getFragment(self, idx_plus_1):
         # Note on fragment references
         # references > 0 are a straight index into our fragments table 
-        # references <= 0 are a lot more involved: these have to be converted into
+        # references <= 0 are more involved: these have to be converted into
         # namehash references like this: name_idx = (-frag_ref) - 1
         # with this namehash ref we can then lookup the fragment name 
         # finally we need to look through all our fragments to find one with matches the name
