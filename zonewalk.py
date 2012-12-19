@@ -542,10 +542,6 @@ class World(DirectObject):
         
         self.login_client = UDPClientStream('127.0.0.1', 5998)
             
-        # session request: 
-        # opcode 0x0001, crc_len (the value is a guess), connection id, client udp packet size
-        session_request = struct.pack('!hiii', 0x0001, 2, 0, 496)
-        self.login_client.send(session_request)
         
 
 # ------------------------------------------------------------------------------
