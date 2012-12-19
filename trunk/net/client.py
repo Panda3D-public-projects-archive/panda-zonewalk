@@ -32,11 +32,7 @@ OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMA
 
 
 from socket import *
-import select
-import asyncore
-
-import sys
-import select
+import select, sys, struct
 
 
 class UDPClient():
@@ -61,52 +57,11 @@ class UDPClient():
         print 'receiving from:', addr, ' data:', recv_data
         
     def update(self):
-        rlst, wlst, elst =select.select(self.rlst, self.wlst, self.elst, 0)  # with timeout=0 this basically is a poll
+        rlst, wlst, elst = select.select(self.rlst, self.wlst, self.elst, 0)  # with timeout=0 this basically is a poll
         if len(rlst) > 0:
             self.receiveData()
         if len(elst) > 0:
             print 'UDPClient socket error'
-
-    '''
-    00 01  -  Session Request (Client -> Server)
-SOE Opcode	- Net Byte SHORT	
-CRC Length	- Net BYte INT
-Connection ID	- Net Byte INT
-ClientUDPSize	- Net Byte INT	
-
-The SOE Opcode is just the opcode number to identify the packet.
-
-CRC Length is the amount of length of the CRC checksum to append at the end of a packet. SWG uses 2 bytes. 
-Note CRC32 checksums are 32bit, making them 4 bytes, but only 2 are appended.
-
-Connection ID is some type of identification used for the connection. Only other time seen is during a disconnect.
-
-ClientUDPSize is the maximum size allocated for the client's UDP packet buffer. No packet is allowed to exceed this size. 
-If it is larger, it must be fragmented. This size is equal to 496 bytes.
-
-Note* This opcode DOES NOT have a footer.
-
-
-
-
-00 02  -  Session Response(Server -> Client)
-SOE Opcode	- Net Byte SHORT
-Connection ID	- Net Byte INT
-CRCSeed		- Net Byte INT
-CRCLength	- BYTE
-Crypt Flag	- SHORT
-ServerUDPSize	- Net Byte INT
-
-Connection ID is replied using the same ID sent by the Session Request.
-CRCSeed is a seed value used for the calculation of the CRC32 Checksum.
-CRCLength
-Crypt Flag is set to 0x0104 (260) to enable the default encryption method. Set to 0x0 and the encryption is completely disabled.
-ServerUDPSize is the maximum size allocated for the server's UDP packet buffer. No packet is allowed to exceed this size.
- So far the client has not sent anything large enough to fill this, or be fragmented. This size is equal to 496 bytes.
-
-Note* This opcode DOES NOT have a footer.
-
-    '''
 
             
 class UDPClientStream(UDPClient):
@@ -115,4 +70,16 @@ class UDPClientStream(UDPClient):
         UDPClient.__init__(self, server, port)
         self.session_state = 0
         
-        
+        # session request: 
+        # opcode 0x0001, crc_len (the value is a guess), connection id, client udp packet size
+        session_request = struct.pack('!hiii', 0x0001, 2, 55, 496)
+        self.send(session_request)
+ 
+    def receiveData(self):
+        recv_data, addr = self.client_socket.recvfrom(2048)
+        print len(recv_data)
+        if self.session_state == 0:
+            (opcode, cid, crc_seed, crc_len, crypt_flag, udp_size, session_key) = \
+                struct.unpack('!hiibhii', recv_data[0:21])
+        print 'opcode:0x%x cid:%i crc_seed:%i crc_len:%i crypt_flag:0x%x udp_size:%i session_key:%i' % \
+            (opcode, cid, crc_seed, crc_len, crypt_flag, udp_size, session_key)
