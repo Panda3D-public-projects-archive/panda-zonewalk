@@ -1,4 +1,3 @@
-#labels Featured
 ==Introduction==
 
 Zonewalk is a very basic 3D viewing tool for zone files. It uses the original zone files as they are, no prior conversion is required.
@@ -15,9 +14,11 @@ The configuration is stored in a file named zonewalk.cfg. Under Windows 7 the Pa
 
 This is currently very basic: just a few hot keys.
 
+  * The K Key brings up this listing in  zonewalk itself
   * WSAD Keys provide standard fwd/bck movement and camera roatation
   * Number keys 1 - 5 select camera movement speed
   * F Key toggles flymode on/off
+  * ALT-F toggles FOG and FAR plane on/off. Switching this off can be usefull if you've lost your bearings but also has a very noticeable performance impact especially in larger zones
   * L Key opens the zone selection dialog
   * Z Key saves the current zone as the new default startup zone
   * ESC Key exits
