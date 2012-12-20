@@ -56,14 +56,13 @@ class PolyGroup():
         self.sprite_list_index = 0
         self.nodePath = None
         
-
     # Parameters:
     # wld_container - WldContainer parent object
     # f             - the f36 fragment we are based on
     # start_index   - index of our first poly in the fragment's polyList polygon list
     # n_polys       - numer of polys to build
     # tex_idx       - index of the texture that all our polys share
-    def build(self, wld_container, f, start_index, n_polys, tex_idx):
+    def build(self, wld_container, f, start_index, n_polys, tex_idx,debug=False):
 
         
         # f.dump()
@@ -97,9 +96,30 @@ class PolyGroup():
             if sprite.numtex > 0:   
                 t = sprite.textures[0]
                 self.nodePath.setTexture(t)
+                if debug:
+                    print("    polygroup build had texture count: " + str(sprite.numtex) + " AnimDelay: " + str(sprite.anim_delay))
+                patchInvertDDSV(self.nodePath,t,debug)
+                if sprite.anim_delay > 0:
+                    geom_num = self.node.getNumGeoms()-1
+                    if debug:
+                        print("Adding geom render state for " + self.name)
+                    from panda3d.core import ColorBlendAttrib
+                    self.node.setAttrib(ColorBlendAttrib.make(ColorBlendAttrib.MAdd,ColorBlendAttrib.OAlphaScale,ColorBlendAttrib.OOne))
+                    sprite.addAnimGeomRenderState( (self.node,geom_num,self.node.getGeomState(geom_num),self.name) )
         else:
             print 'Error: texture (idx=%i) not found. PolyGroup will be rendered untextured' % (tex_idx)
 
         return 1
         
-              
+def patchInvertDDSV(np,tex,debug=False):
+    from panda3d.core import Texture
+    from panda3d.core import TextureStage
+    cmpr = tex.getCompression()
+    if cmpr == Texture.CMDxt1 or cmpr == Texture.CMDxt5:
+        scale2d = np.getTexScale( TextureStage.getDefault() )
+        scale2d[1] = -scale2d[1]
+        np.setTexScale( TextureStage.getDefault(), scale2d )
+    else:
+        if debug:
+            print( " NOT INVERTING.. type was " + str(tex.getCompression()))
+      

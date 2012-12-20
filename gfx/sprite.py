@@ -89,7 +89,7 @@ class Sprite():
             self.current_texture = 0
             
         t = self.textures[self.current_texture]
-        
+
         # gnr is a tuple (see addAnimGeomRenderState() below)
         for gnr in self.anim_render_states:
             geom_node = gnr[0]
@@ -108,7 +108,7 @@ class Sprite():
             geom_node.setGeomState(geom_number, new_state)
             
     # store render states passed in here for use in the texture animation frame update loop
-    # input is a tuple of (geom_node, geom_number, render_states)
+    # input is a tuple of (geom_node, geom_number, render_states,[name])
     def addAnimGeomRenderState(self, g):
         self.anim_render_states.append(g)
         

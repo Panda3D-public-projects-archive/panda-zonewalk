@@ -92,7 +92,7 @@ class TextureManager():
             tc = self.textures[original_name]   # get the original texture
             bm = tc.image_file
             img_type = tc.image_type
-            
+
             if img_type == 'DDS':
                 mtex = TextureContainer(name, tc.panda_texture, tc.image_file, img_type)
                 self.textures[name] = mtex

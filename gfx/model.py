@@ -94,8 +94,6 @@ class ModelManager():
             
                 # attach an instance of the model under the placeable's NodePath
                 model.mesh.root.instanceTo(np)
-
-    
         
 class Model():
     
@@ -137,7 +135,7 @@ class Model():
         # f36.dump()
         
         m = Mesh(self.name+'_mesh')
-        m.buildFromFragment(f36, self.wld_container)
+        m.buildFromFragment(f36, self.wld_container,False)
         self.mesh = m
         self.loaded = 1
         
