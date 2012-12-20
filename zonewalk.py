@@ -62,7 +62,7 @@ from net.client import UDPClientStream
 
 
 
-VERSION = '0.1.2'
+VERSION = '0.1.3'
 
 # Function to put instructions on the screen.
 def addInstructions(pos, msg):
