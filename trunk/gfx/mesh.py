@@ -68,7 +68,7 @@ class Mesh():
         self.root = NodePath(PandaNode(name+'_mesh'))
         
     # f is a 0x36 mesh fragment (see fragment.py for reference)
-    def buildFromFragment(self, f, wld_container):
+    def buildFromFragment(self, f, wld_container,debug=False):
         
         # write vertex coordinates
         for v in f.vertexList:
@@ -103,10 +103,12 @@ class Mesh():
             n_polys = pt[0]
             tex_idx = pt[1]
 
+            if debug:
+                print("  Bulding a poly group with tex_id " + str(tex_idx))
             pg = PolyGroup(self.vdata, tex_idx)
                         
             # pass fragment so that it can access the SPRITES
-            if pg.build(wld_container, f, poly_idx, n_polys, tex_idx) == 1:
+            if pg.build(wld_container, f, poly_idx, n_polys, tex_idx, debug) == 1:
                 self.poly_groups.append(pg)
                 pg.nodePath.reparentTo(self.root)
                 

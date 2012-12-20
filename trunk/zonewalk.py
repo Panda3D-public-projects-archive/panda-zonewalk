@@ -30,9 +30,9 @@ OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMA
 
 '''
 
-import os, asyncore
+import os
 import sys, copy, struct
-from math import pi, sin, cos
+from math import pi, sin, cos, fabs
 
 
 
@@ -74,10 +74,75 @@ def addTitle(text):
     return OnscreenText(text=text, style=1, fg=(1,1,1,1),
                         pos=(1.3,-0.95), align=TextNode.ARight, scale = .03)
         
+class MouseAccume(object):
+    def __init__(self,getCenter,hScaling=1,vScaling=1,aMax=5,dMax=10):
+        super(MouseAccume,self).__init__()
+        self.getCenter = getCenter
+        self.accumMax = aMax
+        self.decelMax = dMax
+        self.hScale = hScaling
+        self.vScale = vScaling
+        self.accumCount = 0
+        self.decelCount = 0
+        self.anchor_x = 0
+        self.anchor_y = 0
+        self.dx = 0
+        self.dy = 0
+        self.last_x = 0
+        self.last_y = 0
+
+    def update(self):
+        mData = base.win.getPointer(0)
+        mouse_x = mData.getX()
+        mouse_y = mData.getY()
+        if self.accumCount == 0:
+            self.anchor_x = mouse_x
+            self.anchor_y = mouse_y
+            self.last_x = mouse_x
+            self.last_y = mouse_y
+            self.decelCount = 0
+
+        if self.accumCount < self.accumMax:
+            #print("Accumulating " + str(self.accumCount) + "max: " + str(self.accumMax))
+            self.accumCount += 1
+        else:
+            if self.decelCount < self.decelMax:
+                #print("Smoothing")
+                self.dx = (mouse_x - self.anchor_x) * self.hScale
+                self.dy = (self.anchor_y - mouse_y) * self.vScale
+                #print(" Deltas %f : %f " % (self.dx,self.dy))
+                self.anchor_x += self.dx * .3
+                self.anchor_y -= self.dy * .3
+                
+            tdx = self.last_x - mouse_x
+            tdy = self.last_y - mouse_y
+            if tdx == 0 and tdy == 0:
+                self.decelCount += 1
+            else:
+                self.decelCount = 0
+
+            if self.decelCount > self.decelMax:
+                self.dx = 0
+                self.dy = 0
+                self.accumCount = 0
+                center = self.getCenter()
+                base.win.movePointer(0, center[0], center[1])
+
+        self.last_x = mouse_x
+        self.last_y = mouse_y
+
+    def reset(self):
+        self.accumCount = 0
+        self.dx = 0
+        self.dy = 0
+
+
 class World(DirectObject):
 
     def __init__(self):
-        
+        self.last_mousex = 0
+        self.last_mousey = 0
+
         self.zone = None
         self.zone_reload_name = None
         
@@ -98,8 +163,25 @@ class World(DirectObject):
         self.consoleOut('zonewalk v.%s loading configuration' % VERSION)
         self.configurator = Configurator(self)
         cfg = self.configurator.config
-        self.xres = int(cfg['xres'])
-        self.yres = int(cfg['yres'])
+        resaveRes = False
+        if 'xres' in cfg:
+            self.xres = int(cfg['xres'])
+        else:
+            self.xres = 1024
+            resaveRes = True
+
+        if 'yres' in cfg:
+            self.yres = int(cfg['yres'])
+        else:
+            self.yres = 768
+            resaveRes = True
+
+        if resaveRes:
+            self.saveDefaultRes()
+
+        self.xres_half = self.xres / 2
+        self.yres_half = self.yres / 2
+        self.mouse_accum = MouseAccume( lambda: (self.xres_half,self.yres_half))
 
         self.eyeHeight = 7.0
         self.rSpeed = 80
@@ -112,8 +194,12 @@ class World(DirectObject):
         
         base.win.requestProperties( self.winprops ) 
         base.disableMouse()
-        
-        self.doLogin()
+
+        # network test stuff
+        self.login_client = None
+        if 'testnet' in cfg:
+            if cfg['testnet'] == '1':
+                self.doLogin()
         
         # Post the instructions
         self.title = addTitle('zonewalk v.' + VERSION)
@@ -129,6 +215,7 @@ class World(DirectObject):
         
         # Accept the application control keys: currently just esc to exit navgen       
         self.accept("escape", self.exitGame)
+        self.accept("window-event", self.resizeGame)
         
         # Create some lighting
         ambient_level = .6
@@ -354,43 +441,56 @@ class World(DirectObject):
         base.camera.setPos(20 * sin(angleRadians), -20.0 * cos(angleRadians), 3)
         base.camera.setHpr(angleDegrees, 0, 0)
         return task.cont
-        
+
 
     def camTask(self, task):
         # query the mouse
         mouse_dx = 0
         mouse_dy = 0
 
+
         # if we have a mouse and the right button is depressed
-        if base.mouseWatcherNode.hasMouse() and self.keyMap["mouse3"] != 0:
-            # determine movement since last frame
-            mouse_dx=base.mouseWatcherNode.getMouseX()
-            mouse_dy=base.mouseWatcherNode.getMouseY()
-            # print 'mousex:%i mousey:%i' % (mouse_x, mouse_y)           
-            # reset mouse position to screen center
-            base.win.movePointer(0, self.xres / 2 , self.yres / 2)
+        if base.mouseWatcherNode.hasMouse():
+            if self.keyMap["mouse3"] != 0:
+                self.mouse_accum.update()
+            else:
+                self.mouse_accum.reset()
+
+        mouse_dx = self.mouse_accum.dx
+        mouse_dy = self.mouse_accum.dy
+
+        self.rXSpeed = fabs(self.mouse_accum.dx) * (self.cam_speed+1) * max(5 * 1000/self.xres,3)
+        self.rYSpeed = fabs(self.mouse_accum.dy) * (self.cam_speed+1) * max(3 * 1000/self.yres,1)
             
         if (self.keyMap["cam-left"]!=0 or mouse_dx < 0):
             if self.rSpeed < 160:
                 self.rSpeed += 80 * globalClock.getDt()
 
-            self.camHeading += self.rSpeed * globalClock.getDt()
+            if mouse_dx != 0:
+                self.camHeading += self.rXSpeed * globalClock.getDt()
+            else:
+                self.camHeading += self.rSpeed * globalClock.getDt()
+
             if self.camHeading > 360.0:
                 self.camHeading = self.camHeading - 360.0
         elif (self.keyMap["cam-right"]!=0 or mouse_dx > 0):
             if self.rSpeed < 160:
                 self.rSpeed += 80 * globalClock.getDt()
 
-            self.camHeading -= self.rSpeed * globalClock.getDt()
+            if mouse_dx != 0:
+                self.camHeading -= self.rXSpeed * globalClock.getDt()
+            else:
+                self.camHeading -= self.rSpeed * globalClock.getDt()
+
             if self.camHeading < 0.0:
                 self.camHeading = self.camHeading + 360.0
         else:
             self.rSpeed = 80
 
         if mouse_dy > 0:
-            self.camPitch += self.rSpeed * globalClock.getDt()
+            self.camPitch += self.rYSpeed * globalClock.getDt()
         elif mouse_dy < 0:
-            self.camPitch -= self.rSpeed * globalClock.getDt()
+            self.camPitch -= self.rYSpeed * globalClock.getDt()
             
         # set camera heading and pitch
         base.camera.setHpr(self.camHeading, self.camPitch, 0)
@@ -407,6 +507,7 @@ class World(DirectObject):
             self.campos -= v * move_speed * globalClock.getDt()            
 
         # actually move the camera
+        lastPos = base.camera.getPos()
         base.camera.setPos(self.campos)
         # self.plnp.setPos(self.campos)      # move the point light with the viewer position
 
@@ -431,6 +532,9 @@ class World(DirectObject):
             if (len(entries) > 0): # and (entries[0].getIntoNode().getName() == "terrain"):
                 # print len(entries)
                 self.campos.setZ(entries[0].getSurfacePoint(render).getZ()+self.eyeHeight)
+            else:
+                self.campos = lastPos
+                base.camera.setPos(self.campos)
         
             #if (base.camera.getZ() < self.player.getZ() + 2.0):
             #    base.camera.setZ(self.player.getZ() + 2.0)
@@ -446,6 +550,14 @@ class World(DirectObject):
         
     def exitGame(self):           
         sys.exit(0)
+
+    def resizeGame(self,win):
+        props = base.win.getProperties() 
+        self.xres = props.getXSize()
+        self.yres = props.getYSize()
+        self.xres_half = self.xres / 2
+        self.yres_half = self.yres / 2
+        self.saveDefaultRes()
                 
     #Records the state of the arrow keys
     # this is used for camera control
@@ -464,7 +576,9 @@ class World(DirectObject):
             self.zone.update()
           
         taskMgr.step()
-        self.login_client.update()
+   
+        if self.login_client != None:
+            self.login_client.update()  
         
         
     # ZONE loading ------------------------------------------------------------
@@ -484,12 +598,18 @@ class World(DirectObject):
             self.consoleOff()
             self.setFlymodeText()
             base.setBackgroundColor(self.fog_colour)
-                
+        
+    def saveDefaultRes(self):
+        cfg = self.configurator.config
+        cfg['xres'] = str(self.xres)
+        cfg['yres'] = str(self.yres)
+        self.configurator.saveConfig()
+
     # initial world load after bootup
     def load(self):       
         cfg = self.configurator.config
         
-        if cfg.has_key('testnet'):
+        if self.login_client != None:
             return
             
         zone_name = cfg['default_zone']
@@ -556,8 +676,13 @@ world = World()
 world.load()
 
 # this position is near the qeynos side zone in of Blackburrow
-world.campos = Point3(-155.6, 41.2, 4.9 + world.eyeHeight)
-world.camHeading = 270.0
+# world.campos = Point3(-155.6, 41.2, 4.9 + world.eyeHeight)
+# world.camHeading = 270.0
+
+# point near fire in tunnel anim texture test
+world.campos = Point3( -1643.44, -156.67, 7 )
+world.camHeading = 41.19
+
 base.camera.setPos(world.campos)
 
 while True:

@@ -108,9 +108,9 @@ class Zone():
         self.delta_t += globalClock.getDt()
         if self.delta_t > 0.2:
             self.delta_t = 0
-            for sprite in self.zone_wld_container.animated_sprites:
-                sprite.update()     # drive all sprite animation updates    
-        
+            for container in self.wld_containers:
+                  for sprite in self.wld_containers[container].animated_sprites:
+                      sprite.update()
         
     # build the main zone geometry mesh
     def prepareZoneMesh(self):
@@ -228,6 +228,7 @@ class Zone():
                 # new style sprite list
                 sprite_list[idx] = sprite
                 if sprite.anim_delay != 0:
+                    print("Adding animated sprite to master list " + sprite.name)
                     wld_container.animated_sprites.append(sprite)
                 
             idx += 1    # need to increment regardless of whether we stored or not
@@ -274,6 +275,7 @@ class Zone():
         
         for f31 in f31_list:
             self.loadSpriteList(wld_container, f31)
+            #print("Loaded sprites got this many: " + str(len(wld_container.animated_sprites)))
         
         
     # preload the textures/sprites for all loaded containers
@@ -314,6 +316,7 @@ class Zone():
                 if attr != None:
                     # print attr
                     tex = attr.getTexture()
+
                     # print tex       # BINGO! now we have the texture for this GEOM, lets find the sprite
                     sprite = self.zone_wld_container.findSpriteUsing(tex)
                     if sprite != None:
