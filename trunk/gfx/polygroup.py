@@ -104,7 +104,14 @@ class PolyGroup():
                     if debug:
                         print("Adding geom render state for " + self.name)
                     from panda3d.core import ColorBlendAttrib
-                    self.node.setAttrib(ColorBlendAttrib.make(ColorBlendAttrib.MAdd,ColorBlendAttrib.OAlphaScale,ColorBlendAttrib.OOne))
+                    
+                    # seems animated "masked" textrue need this in order to function
+                    # dont want to have it on the main zone geoms though cause it breaks
+                    # semi trasparent surfaces (water etc). Probably should move away from making those
+                    # transparent through color blending and simply patch up their alpha channels as needed?
+                    if sprite.masked == 1:
+                        self.node.setAttrib(ColorBlendAttrib.make(ColorBlendAttrib.MAdd,ColorBlendAttrib.OAlphaScale,ColorBlendAttrib.OOne))
+                    
                     sprite.addAnimGeomRenderState( (self.node,geom_num,self.node.getGeomState(geom_num),self.name) )
         else:
             print 'Error: texture (idx=%i) not found. PolyGroup will be rendered untextured' % (tex_idx)

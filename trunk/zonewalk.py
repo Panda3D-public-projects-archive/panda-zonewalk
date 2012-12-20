@@ -244,20 +244,22 @@ class World(DirectObject):
         self.keyMap = {"left":0, "right":0, "forward":0, "backward":0, "cam-left":0, \
             "cam-right":0, "mouse3":0, "flymode":1 }
 
+        # setup FOG
         self.fog_colour = (0.8,0.8,0.8,1.0)
-        linfog = Fog("A linear-mode Fog node")
-        linfog.setColor(self.fog_colour)
-        linfog.setLinearRange(700, 980)         # onset, opaque distances as params
+        self.linfog = Fog("A linear-mode Fog node")
+        self.linfog.setColor(self.fog_colour)
+        self.linfog.setLinearRange(700, 980)         # onset, opaque distances as params
         # linfog.setLinearFallback(45,160,320)
-        base.camera.attachNewNode(linfog)
-        render.setFog(linfog)
+        base.camera.attachNewNode(self.linfog)
+        render.setFog(self.linfog)
+        self.fog = 1
         
         # camera control
         self.campos = Point3(0, 0, 0)
         self.camHeading = 0.0
         self.camPitch = 0.0
         base.camLens.setFov(65.0)
-        base.camLens.setFar(1000) 
+        base.camLens.setFar(1200) 
         
         self.cam_speed = 0  # index into self.camp_speeds
         self.cam_speeds = [40.0, 80.0, 160.0, 320.0, 640.0]
@@ -335,6 +337,7 @@ class World(DirectObject):
             self.accept("4", self.setSpeed, ["speed", 3])
             self.accept("5", self.setSpeed, ["speed", 4])
 
+            self.accept("alt-f", self.fogToggle)
             self.accept("t", self.camLightToggle)
             self.accept("k", self.displayKeyHelp)
             self.accept("f", self.toggleFlymode)
@@ -361,6 +364,16 @@ class World(DirectObject):
         self.cam_speed = value
         self.setFlymodeText()
         
+    def fogToggle(self):
+        if self.fog == 1:
+            render.clearFog()
+            base.camLens.setFar(100000) 
+            self.fog = 0
+        else:
+            render.setFog(self.linfog)
+            base.camLens.setFar(1200) 
+            self.fog = 1
+            
     def camLightToggle(self):
         if self.cam_light == 0:
             render.setLight(self.plnp)
@@ -392,6 +405,10 @@ class World(DirectObject):
         self.kh.append(OnscreenText(text=msg, style=1, fg=(1,1,1,1),
                         pos=(-0.5, pos), align=TextNode.ALeft, scale = .04))
         msg = 'L: load a zone'
+        pos -= 0.05
+        self.kh.append(OnscreenText(text=msg, style=1, fg=(1,1,1,1),
+                        pos=(-0.5, pos), align=TextNode.ALeft, scale = .04))
+        msg = 'ALT-F: toggle FOG and FAR plane on/off'
         pos -= 0.05
         self.kh.append(OnscreenText(text=msg, style=1, fg=(1,1,1,1),
                         pos=(-0.5, pos), align=TextNode.ALeft, scale = .04))
@@ -675,13 +692,16 @@ print 'starting zonewalk v' + VERSION
 world = World()
 world.load()
 
+
+# THIS stuff ought to go into config at some point :)
+
 # this position is near the qeynos side zone in of Blackburrow
-# world.campos = Point3(-155.6, 41.2, 4.9 + world.eyeHeight)
-# world.camHeading = 270.0
+world.campos = Point3(-155.6, 41.2, 4.9 + world.eyeHeight)
+world.camHeading = 270.0
 
 # point near fire in tunnel anim texture test
-world.campos = Point3( -1643.44, -156.67, 7 )
-world.camHeading = 41.19
+# world.campos = Point3( -1643.44, -156.67, 7 )
+# world.camHeading = 41.19
 
 base.camera.setPos(world.campos)
 
