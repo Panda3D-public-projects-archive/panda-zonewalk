@@ -106,7 +106,7 @@ class Model():
         
     # wld_containers : directory of wld container objects
     def load(self):
-        # print 'loading model:', self.name
+        print 'loading model:', self.name
         
         # find our 0x14 fragment in any of the "object" wld files in the container directory
         f14 = None
@@ -125,13 +125,14 @@ class Model():
         
         # note that this will need to be changed when we support animated mob models
         # for those f14.fragRefs does not point to a 0x2d frag but rather to a 0x11 anim track ref
-        f2d = wld_file_obj.getFragment(f14.fragRefs3[0])
-        if f2d == None:
+        frag = wld_file_obj.getFragment(f14.fragRefs3[0])
+        if frag.type == 0x11:
+            print 'Model is animated!'
             return  # for now we need to abort here because we dont support animated models yet!
             
         # f2d.dump()
                     
-        f36 = wld_file_obj.getFragment(f2d.fragRef)
+        f36 = wld_file_obj.getFragment(frag.fragRef)
         # f36.dump()
         
         m = Mesh(self.name+'_mesh')

@@ -130,12 +130,8 @@ class WLDFile():
         self.codes = [0x95, 0x3A, 0xC5, 0x2A, 0x95, 0x7A, 0x95, 0x6A]
         
         self.names = None   # decoded namehash
-        self.fragment_decoders = { 
-            0x36 : self.decode0x36, 0x03 : self.decode0x03, 0x31 : self.decode0x31,
-            0x30 : self.decode0x30, 0x05 : self.decode0x05, 0x04 : self.decode0x04,
-            0x14 : self.decode0x14, 0x15 : self.decode0x15, 0x2D : self.decode0x2D
-            }
-            
+        
+        self.known_fragments = [ 0x36, 0x31, 0x30, 0x2d, 0x15, 0x14, 0x13, 0x11, 0x10, 0x5, 0x4, 0x3 ] 
         self.fragment_type_counts = {}
         self.fragments = {}
         
@@ -185,61 +181,39 @@ class WLDFile():
     # additionaly the original file offset of the fragment is used as fragment ID which 
     # is useful for easy handling of fragment references
     
-    def decode0x36(self, id, type, nameRef, buf, offset):
-        f = Fragment36(id, type, nameRef, self)
-        self.fragments[f.id] = f
-        f.decode(buf, offset)
-        if type in self.dump_list:
-            f.dump()
-    def decode0x31(self, id, type, nameRef, buf, offset):
-        f = Fragment31(id, type, nameRef, self)
-        self.fragments[f.id] = f
-        f.decode(buf, offset)
-        if type in self.dump_list:
-            f.dump()
-    def decode0x30(self, id, type, nameRef, buf, offset):
-        f = Fragment30(id, type, nameRef, self)
-        self.fragments[f.id] = f
-        f.decode(buf, offset)
-        if type in self.dump_list:
-            f.dump()
-    def decode0x2D(self, id, type, nameRef, buf, offset):
-        f = Fragment2D(id, type, nameRef, self)
-        self.fragments[f.id] = f
-        f.decode(buf, offset)
-        if type in self.dump_list:
-            f.dump()
-    def decode0x15(self, id, type, nameRef, buf, offset):
-        f = Fragment15(id, type, nameRef, self)
-        self.fragments[f.id] = f
-        f.decode(buf, offset)
-        if type in self.dump_list:
-            f.dump()
-    def decode0x14(self, id, type, nameRef, buf, offset):
-        f = Fragment14(id, type, nameRef, self)
-        self.fragments[f.id] = f
-        f.decode(buf, offset)
-        if type in self.dump_list:
-            f.dump()
-    def decode0x05(self, id, type, nameRef, buf, offset):
-        f = Fragment05(id, type, nameRef, self)
-        self.fragments[f.id] = f
-        f.decode(buf, offset)
-        if type in self.dump_list:
-            f.dump()
-    def decode0x04(self, id, type, nameRef, buf, offset):
-        f = Fragment04(id, type, nameRef, self)
-        self.fragments[f.id] = f
-        f.decode(buf, offset)
-        if type in self.dump_list:
-            f.dump()
-    def decode0x03(self, id, type, nameRef, buf, offset):
-        f = Fragment03(id, type, nameRef, self)
-        self.fragments[f.id] = f
-        f.decode(buf, offset)
-        if type in self.dump_list:
-            f.dump()
+    def decodeFragment(self, id, type, nameRef, buf, offset):
+        # print type
+        fragment = None
+        if type == 0x36:
+            fragment = Fragment36(id, type, nameRef, self)
+        elif type == 0x31:
+            fragment = Fragment31(id, type, nameRef, self)
+        elif type == 0x30:
+            fragment = Fragment30(id, type, nameRef, self)
+        elif type == 0x2D:
+            fragment = Fragment2D(id, type, nameRef, self)
+        elif type == 0x15:
+            fragment = Fragment15(id, type, nameRef, self)
+        elif type == 0x14:
+            fragment = Fragment14(id, type, nameRef, self)
+        elif type == 0x13:
+            fragment = Fragment13(id, type, nameRef, self)
+        elif type == 0x11:
+            fragment = Fragment11(id, type, nameRef, self)
+        elif type == 0x10:
+            fragment = Fragment10(id, type, nameRef, self)
+        elif type == 0x05:
+            fragment = Fragment05(id, type, nameRef, self)
+        elif type == 0x04:
+            fragment = Fragment04(id, type, nameRef, self)
+        elif type == 0x03:
+            fragment = Fragment03(id, type, nameRef, self)
 
+        fragment.decode(buf, offset)
+        self.fragments[fragment.id] = fragment
+        if type in self.dump_list:
+            fragment.dump()
+        
 
     # -------------------------------------------------------------------------
     # main loader driver
@@ -292,11 +266,10 @@ class WLDFile():
             # print 'fragment len: %i type: 0x%x name:%s' % (fragment_len, fragment_type, fnam )
             
             self.countFragmentType(fragment_type)       # keep some statistics on fragment type counts
-
-            if self.fragment_decoders.has_key(fragment_type):
-                func = self.fragment_decoders[fragment_type]
-                func(frag_id, fragment_type, fragment_name, wld, offset)
-                    
+            
+            if fragment_type in self.known_fragments:
+                self.decodeFragment(frag_id, fragment_type, fragment_name, wld, offset)
+                
             # fragment data
             sum_len += fragment_len + 8 # add the len and type fields (but not the name field, see below)
             offset += 12                # skip header

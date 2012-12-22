@@ -500,6 +500,101 @@ class Fragment14(Fragment):
         for i in range(0, f.size2):
             print 'frag ref:%i' % (self.fragRefs3[i])
 
+# Mob Skeleton Piece Track - Reference
+class Fragment13(Fragment):
+    def __init__(self, id, type, nameRef, wld):
+        Fragment.__init__(self, id, type, nameRef, wld)
+        
+    def decode(self, buf, offset):        
+        offset += 12    # skip over generic fragment header first
+        f = self
+        (f.fragRef, f.params1  ) = struct.unpack('<ii',  buf[offset:offset+8])
+        offset += 8
+        
+    def dump(self):
+        Fragment.dump(self)
+        f = self
+        print 'fragRef:%i params1:0x%x' % (f.fragRef, f.params1)
+
+# Animation Track - Reference
+class Fragment11(Fragment):
+    def __init__(self, id, type, nameRef, wld):
+        Fragment.__init__(self, id, type, nameRef, wld)
+        
+    def decode(self, buf, offset):        
+        offset += 12    # skip over generic fragment header first
+        f = self
+        (f.fragRef, f.params1  ) = struct.unpack('<ii',  buf[offset:offset+8])
+        offset += 8
+        
+    def dump(self):
+        Fragment.dump(self)
+        f = self
+        print 'fragRef:%i params1:0x%x' % (f.fragRef, f.params1)
+
+# Skeleton Track Set
+class Fragment10(Fragment):
+    def __init__(self, id, type, nameRef, wld):
+        Fragment.__init__(self, id, type, nameRef, wld)
+        
+    def decode(self, buf, offset):        
+        offset += 12    # skip over generic fragment header first
+        f = self
+        (f.flags, f.size1, f.fragRef1 ) = struct.unpack('<iii',  buf[offset:offset+12])
+        offset += 12
+        
+        f.params1_0 = f.params1_1 = f.params1_2 = f.params1 = 0
+        
+        if f.flags & 1:
+            (f.params1_0, f.params1_1, f.params1_2) =  struct.unpack('<iii',  buf[offset:offset+12])
+            offset += 12
+        if f.flags & (1 << 1):
+            (f.params2,) =  struct.unpack('<f',  buf[offset:offset+4])
+            offset += 4
+          
+        f.entries = []
+        for i in range(0, f.size1):
+            (nameRef, flags, fragRef1, fragref2, size) =  struct.unpack('<iiiii',  buf[offset:offset+20])
+            offset += 20
+            index_list = []
+            for j in range(0, size):
+                (index,) =  struct.unpack('<i',  buf[offset:offset+4])
+                offset += 4
+                index_list.append(index)
+
+            f.entries.append((nameRef, flags, fragRef1, fragref2, size, index_list))
+
+        f.size2 = 0
+        if f.flags & (1 << 9):
+            (f.size2,) =  struct.unpack('<i',  buf[offset:offset+4])
+            offset += 4
+            f.fragRefs3 = []
+            f.data3 = []
+            for i in range(0, f.size2):
+                (ref,) =  struct.unpack('<i',  buf[offset:offset+4])
+                offset += 4
+                f.fragRefs3.append(ref)
+            for i in range(0, f.size2):
+                (data,) =  struct.unpack('<i',  buf[offset:offset+4])
+                offset += 4
+                f.data3.append(ref)
+                
+            
+    def dump(self):
+        Fragment.dump(self)
+        f = self
+        print 'flags:0x%x size1:%i fragRef1:%i size2:%i' % (f.flags, f.size1, f.fragRef1, f.size2)
+        print 'params1_0:%i, params1_1:%i, params1_2:%i,params2:%f,' % \
+            (f.params1_0, f.params1_1, f.params1_2, f.params2)
+
+        print 'skeleton entries:%i' % (f.size1)
+        for e in f.entries:
+            print '\tnameRef:%i name:%s flags:0x%x fragRef1:%i fragref2:%i size:%i ' % \
+                (e[0], self.wld.getName(e[0]) ,e[1], e[2], e[3], e[4])
+            for i in range(0, e[4]):
+                print '\tindex:%i' % (e[5][i])
+                    
+
 # Texture Bitmap Info Reference
 class Fragment05(Fragment):
     def __init__(self, id, type, nameRef, wld):
