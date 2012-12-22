@@ -63,7 +63,7 @@ class Sprite():
         # 0xb   - 01011
         # 0x17  - 10111
         if self.params1 & 0x00000002:
-            print 'masked texture sprite:%s params:0x%x' % (name, self.params1)
+            # print 'masked texture sprite:%s params:0x%x' % (name, self.params1)
             self.masked = 1
             
         # fully transparent (zone boundaries)

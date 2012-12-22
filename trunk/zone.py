@@ -391,7 +391,7 @@ class Zone():
         if s3d.load() == 0:
             # s3d.dumpListing()
             wldObj1 = WLDFile(self.name+'_obj')
-            # wldObj1.setDumpList([0x14, 0x15, 0x2D, 0x36])
+            wldObj1.setDumpList([0x11, 0x10])
             wldObj1.load(s3d)
             self.obj1_wld_container = WLDContainer('obj', self, wldObj1, s3d)
             self.wld_containers['obj1'] = self.obj1_wld_container
