@@ -164,7 +164,7 @@ class TextureManager():
             texfile = s3dentry.data
             (magic,) = struct.unpack('<2s', texfile[0:2])
             if magic == 'BM':
-                t_type = 'IMG'      # raw 32 bit rgba
+                t_type = 'IMG'      # raw 32 bit rgba (actually argb)
                 # Generic BMP file
                 # patch up the sometimes irregular bmp headers
                 texfile = self.checkBmp(texfile, texname)
