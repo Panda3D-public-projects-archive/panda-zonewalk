@@ -131,7 +131,7 @@ class WLDFile():
         
         self.names = None   # decoded namehash
         
-        self.known_fragments = [ 0x36, 0x31, 0x30, 0x2d, 0x15, 0x14, 0x13, 0x11, 0x10, 0x5, 0x4, 0x3 ] 
+        self.known_fragments = [ 0x36, 0x31, 0x30, 0x2d, 0x15, 0x14, 0x13, 0x12, 0x11, 0x10, 0x5, 0x4, 0x3 ] 
         self.fragment_type_counts = {}
         self.fragments = {}
         
@@ -198,6 +198,8 @@ class WLDFile():
             fragment = Fragment14(id, type, nameRef, self)
         elif type == 0x13:
             fragment = Fragment13(id, type, nameRef, self)
+        elif type == 0x12:
+            fragment = Fragment12(id, type, nameRef, self)
         elif type == 0x11:
             fragment = Fragment11(id, type, nameRef, self)
         elif type == 0x10:

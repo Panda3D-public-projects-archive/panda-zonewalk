@@ -514,7 +514,35 @@ class Fragment13(Fragment):
     def dump(self):
         Fragment.dump(self)
         f = self
-        print 'fragRef:%i params1:0x%x' % (f.fragRef, f.params1)
+        print '\tfragRef:%i params1:0x%x' % (f.fragRef, f.params1)
+
+# Mob Skeleton Piece Track
+class Fragment12(Fragment):
+    def __init__(self, id, type, nameRef, wld):
+        Fragment.__init__(self, id, type, nameRef, wld)
+        
+    def decode(self, buf, offset):        
+        offset += 12    # skip over generic fragment header first
+        f = self
+        (f.flags, f.size  ) = struct.unpack('<ii',  buf[offset:offset+8])
+        offset += 8
+        (f.rotDenom, f.rotx, f.roty, f.rotz) = struct.unpack('<HHHH',  buf[offset:offset+8])
+        offset += 8
+        (f.shiftx, f.shifty, f.shiftz, f.shiftDenom) = struct.unpack('<HHHH',  buf[offset:offset+8])
+        offset += 8
+
+        f.data2 = []
+        for i in range(0, f.size):
+            data2 = struct.unpack('<iiii',  buf[offset:offset+16])
+            offset += 16
+            f.data2.append(data2)
+        
+    def dump(self):
+        Fragment.dump(self)
+        f = self
+        print 'flags:0x%x size:%i' % (f.flags, f.size)
+        print '\trotDenom:%i rotx:%i roty:%i rotz:%i' % (f.rotDenom, f.rotx, f.roty, f.rotz)
+        print '\tshiftDenom:%i shiftx:%i shifty:%i shiftz:%i' % (f.shiftDenom, f.shiftx, f.shifty, f.shiftz)
 
 # Animation Track - Reference
 class Fragment11(Fragment):

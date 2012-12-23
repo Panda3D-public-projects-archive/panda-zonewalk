@@ -79,7 +79,7 @@ class ModelManager():
                 np.setAttrib(CullFaceAttrib.make(CullFaceAttrib.MCullClockwise))
             
                 # setting up texture alpha transparency for all models this way currently
-                # seems to work well with our "masked" textures at leaser
+                # seems to work well with our "masked" textures at least
                 np.setTransparency(TransparencyAttrib.MAlpha)
             
                 np.setPos(f.xpos, f.ypos, f.zpos )
@@ -92,8 +92,13 @@ class ModelManager():
                 # print 'scalex:%f scaley:%i scalez:%f' % (f.xscale, f.yscale, f.zscale )
                 np.setScale(f.yscale, f.yscale, f.zscale )
             
-                # attach an instance of the model under the placeable's NodePath
-                model.mesh.root.instanceTo(np)
+                # attach an instance of all the model's meshes under the placeable's NodePath
+                # NOTE that we do not yet properly support animated models, they are displayed
+                # all right, scale seems to be ok but trees for example are sunk into the ground etc
+                # probably caused by the incomplete implementation not yet using the translation values 
+                # in the 0x10 fragments or something
+                for mesh in model.meshes:
+                    mesh.root.instanceTo(np)
         
 class Model():
     
@@ -101,9 +106,50 @@ class Model():
         self.mm = mgr
         self.name = name
         self.wld_container = None   # the container we were loaded from
-        self.mesh = None
+        self.meshes = []
         self.loaded = 0
         
+        
+    # NOTE on model FRAGMENT structures
+    # Static models generally seem to be defined by a straight forward 0x14->0x2d->0x36 chain
+    #
+    # Animated models however are much more complex:
+    #  - they start with 0x14->0x11->0x10 
+    #  - the 0x10 in its first "entry" seems to define the overall model and in the following
+    #    entries the animation frames:  
+    #       - Each "entry" has three fragment references: a nameref and two numeric references
+    #           - fragRef1 is a 0x13 animation trackset ref
+    #           - fragRef2 is a 0x2d mesh reference
+
+    def createStaticModel(self, f36):
+        m = Mesh(self.name+'_mesh')
+        m.buildFromFragment(f36, self.wld_container,False)
+        self.meshes.append(m)
+        self.loaded = 1
+        
+    def createAnimatedModel(self, f11):
+        wld = self.wld_container.wld_file_obj
+        f10 = wld.getFragment(f11.fragRef)
+        if f10.type != 0x10:
+            print 'Model::createAnimatedModel() ERROR expected 0x10 fragment but got:', f10.type
+            return
+        
+        # Lets initially try to only read all the mesh pieces and assemble the basic 
+        # model. Once that is working we can start looking into animation
+        # For this reason we skip the first entry in the loop below (as it does not contain
+        # a mesh ref (see NOTE on fragment structure further above)
+        for i in range(1, f10.size1):
+            f2d = wld.getFragment(f10.entries[i][3])
+            # f2d.dump()
+            f36 = wld.getFragment(f2d.fragRef)
+            # f36.dump()
+
+            m = Mesh(self.name+'_mesh_'+str(i))
+            m.buildFromFragment(f36, self.wld_container, False)
+            self.meshes.append(m)
+            self.loaded = 1
+            
+    
     # wld_containers : directory of wld container objects
     def load(self):
         print 'loading model:', self.name
@@ -127,16 +173,13 @@ class Model():
         # for those f14.fragRefs does not point to a 0x2d frag but rather to a 0x11 anim track ref
         frag = wld_file_obj.getFragment(f14.fragRefs3[0])
         if frag.type == 0x11:
-            print 'Model is animated!'
-            return  # for now we need to abort here because we dont support animated models yet!
+            # print 'Model is animated!'
+            self.createAnimatedModel(frag)
+        elif frag.type == 0x2d:                  
+            f36 = wld_file_obj.getFragment(frag.fragRef)
+            # f36.dump()
+            self.createStaticModel(f36)
+        else:
+            print 'Model::load() WARNING unsupported model structure, dont know how to handle fragment type:', frag.type
             
-        # f2d.dump()
-                    
-        f36 = wld_file_obj.getFragment(frag.fragRef)
-        # f36.dump()
-        
-        m = Mesh(self.name+'_mesh')
-        m.buildFromFragment(f36, self.wld_container,False)
-        self.mesh = m
-        self.loaded = 1
-        
+            
