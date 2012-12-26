@@ -97,9 +97,14 @@ class ModelManager():
                 # all right, scale seems to be ok but trees for example are sunk into the ground etc
                 # probably caused by the incomplete implementation not yet using the translation values 
                 # in the 0x10 fragments or something
+                
+                model.meshes[0].root.instanceTo(np)
+                
+                '''
                 for mesh in model.meshes:
-                    mesh.root.instanceTo(np)
-        
+                    node = mesh.root.instanceTo(np)
+                '''
+                
 class Model():
     
     def __init__(self, mgr, name):
@@ -116,7 +121,7 @@ class Model():
     # Animated models however are much more complex:
     #  - they start with 0x14->0x11->0x10 
     #  - the 0x10 in its first "entry" seems to define the overall model and in the following
-    #    entries the animation frames:  
+    #    entries the model/skeleton pieces:  
     #       - Each "entry" has three fragment references: a nameref and two numeric references
     #           - fragRef1 is a 0x13 animation trackset ref
     #           - fragRef2 is a 0x2d mesh reference
@@ -133,26 +138,56 @@ class Model():
         if f10.type != 0x10:
             print 'Model::createAnimatedModel() ERROR expected 0x10 fragment but got:', f10.type
             return
-        
+               
         # Lets initially try to only read all the mesh pieces and assemble the basic 
         # model. Once that is working we can start looking into animation
-        # For this reason we skip the first entry in the loop below (as it does not contain
-        # a mesh ref (see NOTE on fragment structure further above)
-        for i in range(1, f10.size1):
-            f2d = wld.getFragment(f10.entries[i][3])
-            # f2d.dump()
-            f36 = wld.getFragment(f2d.fragRef)
-            # f36.dump()
+        
+        # Loop over the parts of the model/skeleton: the entries list in the f10 fragment
+        # define these
+        root_mesh = None
+        for i in range(0, f10.size1):
+            
+            if i > 0:
+                f2d = wld.getFragment(f10.entries[i][3])    # entry[3] -> fragRef2
+                # f2d.dump()
+                f36 = wld.getFragment(f2d.fragRef)
+                # f36.dump()
 
-            m = Mesh(self.name+'_mesh_'+str(i))
-            m.buildFromFragment(f36, self.wld_container, False)
+                m = Mesh(self.name+'_mesh_'+str(i))
+                m.buildFromFragment(f36, self.wld_container, False)
+                m.root.reparentTo(root_mesh.root)
+            else: # the root node (index 0) does not have a mesh
+                m = Mesh(self.name+'_mesh_'+str(i))  # empty dummy mesh
+                root_mesh = m
+                
             self.meshes.append(m)
-            self.loaded = 1
+            
+            # get model part orientation data from 0x10->0x13->0x12 ref chain
+            f13 = wld.getFragment(f10.entries[i][2])    # entry[2] -> fragRef1
+            f12 = wld.getFragment(f13.fragRef)
+            
+            denom = float(f12.rotDenom)
+            if denom != 0.0:
+                rotx = f12.rotx/denom
+                roty = f12.roty/denom
+                rotz = f12.rotz/denom
+                m.root.setHpr(rotx / 512.0 * 360.0, roty / 512.0 * 360.0, rotz / 512.0 * 360.0)
+            
+            
+            denom = float(f12.shiftDenom)
+            if denom != 0.0:
+                shiftx = float(f12.shiftx)/denom
+                shifty = float(f12.shifty)/denom
+                shiftz = float(f12.shiftz)/denom
+                # print shiftx, shifty, shiftz
+                m.root.setPos(shiftx, shifty, shiftz)
+            
+        self.loaded = 1
             
     
     # wld_containers : directory of wld container objects
     def load(self):
-        print 'loading model:', self.name
+        # print 'loading model:', self.name
         
         # find our 0x14 fragment in any of the "object" wld files in the container directory
         f14 = None

@@ -86,7 +86,7 @@ class PolyGroup():
         # self.nodePath.setRenderModeFilled()
         # self.nodePath.showBounds()
         
-        self.nodePath.setPos(f.centerX, f.centerY,f.centerZ)    # translate to correct world position
+        self.nodePath.setPos(f.centerX, f.centerY,f.centerZ)    # translate to correct position
         self.nodePath.setAttrib(CullFaceAttrib.make(CullFaceAttrib.MCullCounterClockwise))
         # self.nodePath.setAttrib(CullFaceAttrib.make(CullFaceAttrib.MCullClockwise))
 
